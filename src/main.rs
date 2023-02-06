@@ -42,7 +42,7 @@ struct Args {
     threads: usize,
 
     /// Supress console messages
-    #[clap(short, default_value_t = false)]
+    #[clap(long, default_value_t = false)]
     quiet: bool,
 }
 
