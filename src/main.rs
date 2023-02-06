@@ -26,19 +26,21 @@ enum Name {
 
 #[derive(Debug, Clone, Parser)]
 struct Args {
-    /// Dir where all images are located
-    dir: PathBuf,
-    #[clap(short, long, default_value_t = 70, value_name = "PATH")]
+    /// File or directory containing images to convert
+    #[clap(value_name = "PATH")]
+    path: PathBuf,
+
+    #[clap(short, long, default_value_t = 70, value_name = "QUALITY")]
     quality: u8,
 
-    #[clap(short, long, default_value_t = 4)]
+    #[clap(short, long, default_value_t = 4, value_name = "SPEED")]
     speed: u8,
 
     #[clap(short, long, value_enum, default_value_t = Name::MD5)]
     name_type: Name,
 
     /// Defaults to number of CPU cores
-    #[clap(short, long, default_value_t = 0)]
+    #[clap(short, long, default_value_t = 0, value_name = "THREADS")]
     threads: usize,
 
     /// Supress console messages
@@ -65,7 +67,7 @@ fn main() -> Result<()> {
         .build_global()
         .unwrap();
 
-    if args.dir.is_dir() {
+    if args.path.is_dir() {
         let spin_collect = Spinner::new_with_stream(
             spinners::Dots,
             "Searching for files...",
@@ -73,7 +75,7 @@ fn main() -> Result<()> {
             Streams::Stderr,
         );
 
-        let paths = search_dir(&args.dir);
+        let paths = search_dir(&args.path);
         let psize = paths.len();
 
         spin_collect.success(&format!("Found {psize} files."));
@@ -141,13 +143,13 @@ fn main() -> Result<()> {
             ByteSize::b(sum).to_string_as(true),
             percentage
         );
-    } else if args.dir.is_file() {
+    } else if args.path.is_file() {
         let mut console = ConsoleMsg::new(args.quiet);
 
         console.print_message(format!(
             "Encoding single file {} ({})",
-            args.dir.file_name().unwrap().to_string_lossy().bold(),
-            ByteSize::b(args.dir.metadata()?.len())
+            args.path.file_name().unwrap().to_string_lossy().bold(),
+            ByteSize::b(args.path.metadata()?.len())
                 .to_string_as(true)
                 .bold()
                 .blue()
@@ -156,7 +158,7 @@ fn main() -> Result<()> {
         console.set_spinner("Processing...");
 
         let fsz = process_image(
-            &args.dir,
+            &args.path,
             args.quality,
             args.speed,
             args.name_type,
