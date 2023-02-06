@@ -78,7 +78,7 @@ fn main() -> Result<()> {
 
         let progress_bar = ProgressBar::new(paths.len() as u64).with_style(bar_style());
 
-        progress_bar.enable_steady_tick(Duration::from_millis(500));
+        progress_bar.enable_steady_tick(Duration::from_millis(100));
 
         let start = Instant::now();
 
