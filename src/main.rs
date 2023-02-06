@@ -160,6 +160,43 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+struct ConsoleMsg {
+    spinner: Option<Spinner>,
+    quiet: bool,
+}
+
+impl ConsoleMsg {
+    #[must_use]
+    pub fn new(quiet: bool) -> Self {
+        Self {
+            spinner: None,
+            quiet,
+        }
+    }
+
+    pub fn set_spinner(&mut self, message: &'static str) {
+        let spinner =
+            Spinner::new_with_stream(spinners::Dots, message, Color::Green, Streams::Stderr);
+
+        self.spinner = Some(spinner);
+    }
+
+    pub fn finish_spinner(mut self, message: &str) -> Self {
+        if let Some(spin) = self.spinner {
+            spin.success(message);
+            self.spinner = None
+        }
+
+        self
+    }
+
+    pub fn print_message(&self, message: String) {
+        if !self.quiet {
+            println!("{message}");
+        }
+    }
+}
+
 fn process_image(
     image: &Path,
     quality: u8,
