@@ -28,7 +28,7 @@ enum Name {
 struct Args {
     /// Dir where all images are located
     dir: PathBuf,
-    #[clap(short, long, default_value_t = 70)]
+    #[clap(short, long, default_value_t = 70, value_name = "PATH")]
     quality: u8,
 
     #[clap(short, long, default_value_t = 4)]
@@ -44,6 +44,10 @@ struct Args {
     /// Supress console messages
     #[clap(long, default_value_t = false)]
     quiet: bool,
+
+    /// Keep original file
+    #[clap(short, long, default_value_t = false)]
+    keep: bool,
 }
 
 fn main() -> Result<()> {
@@ -95,6 +99,7 @@ fn main() -> Result<()> {
                     args.quality,
                     args.speed,
                     args.name_type,
+                    args.keep,
                     Some(progress_bar.clone()),
                 )
             })
@@ -150,7 +155,14 @@ fn main() -> Result<()> {
 
         console.set_spinner("Processing...");
 
-        let fsz = process_image(&args.dir, args.quality, args.speed, args.name_type, None)?;
+        let fsz = process_image(
+            &args.dir,
+            args.quality,
+            args.speed,
+            args.name_type,
+            args.keep,
+            None,
+        )?;
 
         console.finish_spinner(&format!(
             "Encoding finished ({})",
@@ -203,6 +215,7 @@ fn process_image(
     quality: u8,
     speed: u8,
     name: Name,
+    keep: bool,
     progress: Option<ProgressBar>,
 ) -> Result<u64> {
     let raw_img = image::open(image)?;
@@ -243,7 +256,10 @@ fn process_image(
     let fpath = binding.parent().unwrap();
 
     fs::write(fpath.join(format!("{fname}.avif")), &avif)?;
-    fs::remove_file(image)?;
+
+    if !keep {
+        fs::remove_file(image)?;
+    }
 
     if let Some(pb) = progress {
         pb.inc(1);
