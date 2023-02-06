@@ -7,7 +7,7 @@ use std::{
 
 use bytesize::ByteSize;
 use clap::{Parser, ValueEnum};
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{bail, Result};
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use owo_colors::OwoColorize;
 use ravif::{Encoder, Img};
@@ -39,7 +39,7 @@ struct Args {
     #[clap(short, long, value_enum, default_value_t = Name::MD5)]
     name_type: Name,
 
-    /// Defaults to number of CPU cores
+    /// Defaults to number of CPU cores. Use 0 for all cores
     #[clap(short, long, default_value_t = 0, value_name = "THREADS")]
     threads: usize,
 
@@ -144,6 +144,14 @@ fn main() -> Result<()> {
             percentage
         );
     } else if args.path.is_file() {
+        if let Some(ext) = args.path.extension() {
+            if !(ext == "jpg" || ext == "png" || ext == "jpeg" || ext == "jfif" || ext == "webp") {
+                bail!("Unsupported image format");
+            }
+        } else {
+            bail!("Invalid file extension");
+        }
+
         let mut console = ConsoleMsg::new(args.quiet);
 
         console.print_message(format!(
@@ -190,10 +198,12 @@ impl ConsoleMsg {
     }
 
     pub fn set_spinner(&mut self, message: &'static str) {
-        let spinner =
-            Spinner::new_with_stream(spinners::Dots, message, Color::Green, Streams::Stderr);
+        if !self.quiet {
+            let spinner =
+                Spinner::new_with_stream(spinners::Dots, message, Color::Green, Streams::Stderr);
 
-        self.spinner = Some(spinner);
+            self.spinner = Some(spinner);
+        }
     }
 
     pub fn finish_spinner(mut self, message: &str) -> Self {
