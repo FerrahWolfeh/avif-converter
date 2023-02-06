@@ -40,6 +40,10 @@ struct Args {
     /// Defaults to number of CPU cores
     #[clap(short, long, default_value_t = 0)]
     threads: usize,
+
+    /// Supress console messages
+    #[clap(short, default_value_t = false)]
+    quiet: bool,
 }
 
 fn main() -> Result<()> {
@@ -133,25 +137,22 @@ fn main() -> Result<()> {
             percentage
         );
     } else if args.dir.is_file() {
-        println!(
+        let mut console = ConsoleMsg::new(args.quiet);
+
+        console.print_message(format!(
             "Encoding single file {} ({})",
             args.dir.file_name().unwrap().to_string_lossy().bold(),
             ByteSize::b(args.dir.metadata()?.len())
                 .to_string_as(true)
                 .bold()
                 .blue()
-        );
+        ));
 
-        let spin_collect = Spinner::new_with_stream(
-            spinners::Dots,
-            "Processing...",
-            Color::Green,
-            Streams::Stderr,
-        );
+        console.set_spinner("Processing...");
 
         let fsz = process_image(&args.dir, args.quality, args.speed, args.name_type, None)?;
 
-        spin_collect.success(&format!(
+        console.finish_spinner(&format!(
             "Encoding finished ({})",
             ByteSize::b(fsz).to_string_as(true).bold().green()
         ));
