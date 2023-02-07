@@ -15,6 +15,7 @@ indicatif = { version = "0.17.3", features = ["rayon"] }
 md5 = "0.7.0"
 num_cpus = "1.15.0"
 owo-colors = "3.5.0"
+rand = "0.8.5"
 ravif = "0.11.1"
 rayon = "1.6.1"
 rgb = "0.8.34"

@@ -110,6 +110,7 @@ dependencies = [
  "md5",
  "num_cpus",
  "owo-colors",
+ "rand",
  "ravif",
  "rayon",
  "rgb",

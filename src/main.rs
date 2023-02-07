@@ -6,23 +6,18 @@ use std::{
 };
 
 use bytesize::ByteSize;
-use clap::{Parser, ValueEnum};
-use color_eyre::eyre::{bail, Result};
+use clap::Parser;
+use color_eyre::eyre::Result;
+use image_avif::ImageFile;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use owo_colors::OwoColorize;
-use ravif::{Encoder, Img};
 use rayon::{prelude::*, ThreadPoolBuilder};
-use rgb::FromSlice;
-use sha2::{Digest, Sha256};
 use spinoff::{spinners, Color, Spinner, Streams};
 
-#[derive(Debug, ValueEnum, Copy, Clone)]
-#[repr(u8)]
-enum Name {
-    MD5,
-    SHA256,
-    Random,
-}
+mod image_avif;
+mod name_fun;
+
+use crate::name_fun::Name;
 
 #[derive(Debug, Clone, Parser)]
 struct Args {
@@ -84,7 +79,7 @@ fn main() -> Result<()> {
 
         let mut global_ctr = 0;
 
-        let initial_size: u64 = paths.iter().map(|(_, num)| num).sum();
+        let initial_size: u64 = paths.iter().map(|item| item.size).sum();
 
         let progress_bar = ProgressBar::new(paths.len() as u64).with_style(bar_style());
 
@@ -95,15 +90,12 @@ fn main() -> Result<()> {
         paths
             .par_iter()
             .with_max_len(1)
-            .map(|(item, _)| {
-                process_image(
-                    item,
-                    args.quality,
-                    args.speed,
-                    args.name_type,
-                    args.keep,
-                    Some(progress_bar.clone()),
-                )
+            .map(|item| -> Result<u64> {
+                let fdata =
+                    item.convert_to_avif(args.quality, args.speed, 1, Some(progress_bar.clone()))?;
+                item.save_avif(&fdata, args.name_type, args.keep)?;
+
+                Ok(fdata.len() as u64)
             })
             .collect_into_vec(&mut final_stats);
 
@@ -144,39 +136,28 @@ fn main() -> Result<()> {
             percentage
         );
     } else if args.path.is_file() {
-        if let Some(ext) = args.path.extension() {
-            if !(ext == "jpg" || ext == "png" || ext == "jpeg" || ext == "jfif" || ext == "webp") {
-                bail!("Unsupported image format");
-            }
-        } else {
-            bail!("Invalid file extension");
-        }
+        let image = ImageFile::from_path(&args.path)?;
 
         let mut console = ConsoleMsg::new(args.quiet);
 
         console.print_message(format!(
             "Encoding single file {} ({})",
-            args.path.file_name().unwrap().to_string_lossy().bold(),
-            ByteSize::b(args.path.metadata()?.len())
-                .to_string_as(true)
-                .bold()
-                .blue()
+            image.name.bold(),
+            ByteSize::b(image.size).to_string_as(true).bold().blue()
         ));
 
         console.set_spinner("Processing...");
 
-        let fsz = process_image(
-            &args.path,
-            args.quality,
-            args.speed,
-            args.name_type,
-            args.keep,
-            None,
-        )?;
+        let fsz = image.convert_to_avif(args.quality, args.speed, thread_num, None)?;
+
+        image.save_avif(&fsz, args.name_type, args.keep)?;
 
         console.finish_spinner(&format!(
             "Encoding finished ({})",
-            ByteSize::b(fsz).to_string_as(true).bold().green()
+            ByteSize::b(fsz.len() as u64)
+                .to_string_as(true)
+                .bold()
+                .green()
         ));
     }
 
@@ -222,76 +203,14 @@ impl ConsoleMsg {
     }
 }
 
-fn process_image(
-    image: &Path,
-    quality: u8,
-    speed: u8,
-    name: Name,
-    keep: bool,
-    progress: Option<ProgressBar>,
-) -> Result<u64> {
-    let raw_img = image::open(image)?;
-
-    let (width, height) = (raw_img.width(), raw_img.height());
-
-    let binding = raw_img.to_rgba8();
-
-    let encodable_img = Img::new(binding.as_rgba(), width as usize, height as usize);
-
-    let encoder = Encoder::new()
-        .with_num_threads(Some(1))
-        .with_alpha_quality(100.)
-        .with_quality(quality as f32)
-        .with_speed(speed);
-
-    let encoded_img = encoder.encode_rgba(encodable_img)?;
-
-    let avif = encoded_img.avif_file;
-
-    let fname = match name {
-        Name::MD5 => {
-            let digest = md5::compute(&avif);
-
-            format!("{digest:x}")
-        }
-        Name::SHA256 => {
-            let mut hasher = Sha256::new();
-
-            hasher.update(&avif);
-
-            hex::encode(hasher.finalize())
-        }
-        Name::Random => todo!(),
-    };
-
-    let binding = image.canonicalize()?;
-    let fpath = binding.parent().unwrap();
-
-    fs::write(fpath.join(format!("{fname}.avif")), &avif)?;
-
-    if !keep {
-        fs::remove_file(image)?;
-    }
-
-    if let Some(pb) = progress {
-        pb.inc(1);
-    }
-
-    Ok(avif.len() as u64)
-}
-
-fn search_dir(dir: &Path) -> Vec<(PathBuf, u64)> {
+fn search_dir(dir: &Path) -> Vec<ImageFile> {
     let paths = fs::read_dir(dir).unwrap();
 
     Vec::from_iter(paths.filter_map(|entry| {
         let entry = entry.unwrap();
         let path = entry.path();
-        let ext = path.extension();
-        if let Some(ext) = ext {
-            if ext == "jpg" || ext == "png" || ext == "jpeg" || ext == "jfif" || ext == "webp" {
-                let size = entry.metadata().unwrap().len();
-                return Some((path, size));
-            }
+        if let Ok(image_file) = ImageFile::from_path(&path) {
+            return Some(image_file);
         }
         None
     }))
