@@ -79,4 +79,19 @@ impl ImageFile {
 
         Ok(())
     }
+
+    pub fn full_convert(
+        self,
+        quality: u8,
+        speed: u8,
+        threads: usize,
+        bar: Option<ProgressBar>,
+        name: Name,
+        keep: bool,
+    ) -> Result<u64> {
+        let fdata = self.convert_to_avif(quality, speed, threads, bar)?;
+        self.save_avif(&fdata, name, keep)?;
+
+        Ok(fdata.len() as u64)
+    }
 }

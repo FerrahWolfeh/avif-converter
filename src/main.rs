@@ -2,6 +2,7 @@ use std::{
     fmt::Write,
     fs,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant},
 };
 
@@ -63,21 +64,19 @@ fn main() -> Result<()> {
         .unwrap();
 
     if args.path.is_dir() {
-        let spin_collect = Spinner::new_with_stream(
-            spinners::Dots,
-            "Searching for files...",
-            Color::Green,
-            Streams::Stderr,
-        );
+        let mut console = ConsoleMsg::new(args.quiet);
+
+        console.set_spinner("Searching for files...");
 
         let paths = search_dir(&args.path);
         let psize = paths.len();
 
-        spin_collect.success(&format!("Found {psize} files."));
+        let con = console.finish_spinner(&format!("Found {psize} files."));
 
-        let mut final_stats = Vec::with_capacity(psize);
+        let final_stats: AtomicU64 = AtomicU64::new(0);
+        let success_count: AtomicU64 = AtomicU64::new(0);
 
-        let mut global_ctr = 0;
+        let global_ctr: AtomicU64 = AtomicU64::new(0);
 
         let initial_size: u64 = paths.iter().map(|item| item.size).sum();
 
@@ -93,41 +92,30 @@ fn main() -> Result<()> {
             thread_num / paths.len()
         };
 
-        paths
-            .par_iter()
-            .with_max_len(1)
-            .map(|item| -> Result<u64> {
-                let fdata = item.convert_to_avif(
-                    args.quality,
-                    args.speed,
-                    threads,
-                    Some(progress_bar.clone()),
-                )?;
-                item.save_avif(&fdata, args.name_type, args.keep)?;
-
-                Ok(fdata.len() as u64)
-            })
-            .collect_into_vec(&mut final_stats);
+        paths.into_par_iter().with_max_len(1).for_each(|item| {
+            if let Ok(size) = item.full_convert(
+                args.quality,
+                args.speed,
+                threads,
+                Some(progress_bar.clone()),
+                args.name_type,
+                args.keep,
+            ) {
+                final_stats.fetch_add(size, Ordering::SeqCst);
+                success_count.fetch_add(1, Ordering::SeqCst);
+            } else {
+                global_ctr.fetch_add(1, Ordering::SeqCst);
+            }
+        });
 
         let elapsed = start.elapsed();
 
         progress_bar.finish();
 
-        let simd_stats = Vec::from_iter(final_stats.into_iter().filter_map(|result| {
-            if let Ok(new_size) = result {
-                Some(new_size)
-            } else {
-                global_ctr += 1;
-                None
-            }
-        }));
-
-        let f_len = simd_stats.len();
-        let sum: u64 = simd_stats.iter().sum();
-
         let texts = ["Original folder size".bold().0, "New folder size".bold().0];
 
-        let delta = ((sum as f32 / initial_size as f32) * 100.) - 100.;
+        let delta =
+            ((final_stats.load(Ordering::SeqCst) as f32 / initial_size as f32) * 100.) - 100.;
 
         let percentage = if delta < 0. {
             let st1 = format!("{delta:.2}%");
@@ -137,14 +125,15 @@ fn main() -> Result<()> {
             format!("{}", st1.red())
         };
 
-        println!(
-            "Encoded {f_len} files in {elapsed:.2?}.\n{} {} | {} {} ({})",
+        con.print_message(format!(
+            "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({})",
+            success_count.load(Ordering::SeqCst),
             texts[0],
             ByteSize::b(initial_size).to_string_as(true).blue().bold(),
             texts[1],
-            ByteSize::b(sum).to_string_as(true),
+            ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
             percentage
-        );
+        ));
     } else if args.path.is_file() {
         let image = ImageFile::from_path(&args.path)?;
 
