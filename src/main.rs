@@ -87,12 +87,22 @@ fn main() -> Result<()> {
 
         let start = Instant::now();
 
+        let threads = if paths.len() >= thread_num {
+            1
+        } else {
+            thread_num / paths.len()
+        };
+
         paths
             .par_iter()
             .with_max_len(1)
             .map(|item| -> Result<u64> {
-                let fdata =
-                    item.convert_to_avif(args.quality, args.speed, 1, Some(progress_bar.clone()))?;
+                let fdata = item.convert_to_avif(
+                    args.quality,
+                    args.speed,
+                    threads,
+                    Some(progress_bar.clone()),
+                )?;
                 item.save_avif(&fdata, args.name_type, args.keep)?;
 
                 Ok(fdata.len() as u64)
