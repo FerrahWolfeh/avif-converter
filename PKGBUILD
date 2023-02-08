@@ -1,5 +1,5 @@
 pkgname=avif-converter-git
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc='Custom avif image converter made with Rust'
 source=("git+https://git.solstice-x0.arpa/FerrahWolfeh/avif-converter")
