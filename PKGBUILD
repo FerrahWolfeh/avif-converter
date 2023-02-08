@@ -5,11 +5,11 @@ pkgdesc='Custom avif image converter made with Rust'
 source=("git+https://git.solstice-x0.arpa/FerrahWolfeh/avif-converter")
 arch=('i686' 'pentium4' 'x86_64' 'arm' 'armv7h' 'armv6h' 'aarch64')
 license=('GPL3')
-makedepends=('cargo', 'nasm')
+makedepends=('cargo' 'nasm')
 sha256sums=('SKIP')
 
 build () {
-  cd "$srcdir"
+  cd "$srcdir/avif-converter"
 
   if [[ $CARCH != x86_64 ]]; then
     export CARGO_PROFILE_RELEASE_LTO=off
@@ -19,7 +19,7 @@ build () {
 }
 
 package() {
-  cd "$srcdir"
+  cd "$srcdir/avif-converter"
 
   install -Dm755 target/release/avif-converter "${pkgdir}/usr/bin/avif-converter"
 }
