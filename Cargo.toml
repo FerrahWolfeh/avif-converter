@@ -10,13 +10,13 @@ bytesize = "1.1.0"
 clap = { version = "4.1.4", features = ["derive", "cargo"] }
 color-eyre = "0.6.2"
 hex = "0.4.3"
-image = { version = "0.24.5", default-features = false, features = ["png", "jpeg", "bmp", "webp"] }
+image = { version = "0.24.5", default-features = false, features = ["png", "jpeg", "webp"] }
 indicatif = { version = "0.17.3", features = ["rayon"] }
 md5 = "0.7.0"
 num_cpus = "1.15.0"
 owo-colors = "3.5.0"
 rand = "0.8.5"
-ravif = "0.11.1"
+ravif = "0.11"
 rayon = "1.6.1"
 rgb = "0.8.34"
 sha2 = { version = "0.10.6", features = ["asm", "asm-aarch64"] }

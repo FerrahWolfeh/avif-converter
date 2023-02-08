@@ -59,9 +59,9 @@ fn main() -> Result<()> {
 
     let pool = ThreadPoolBuilder::new().num_threads(thread_num).build()?;
 
-    if args.path.is_dir() {
-        let mut console = ConsoleMsg::new(args.quiet);
+    let mut console = ConsoleMsg::new(args.quiet);
 
+    if args.path.is_dir() {
         console.set_spinner("Searching for files...");
 
         let paths = search_dir(&args.path);
@@ -137,8 +137,6 @@ fn main() -> Result<()> {
         ));
     } else if args.path.is_file() {
         let image = ImageFile::from_path(&args.path)?;
-
-        let mut console = ConsoleMsg::new(args.quiet);
 
         console.print_message(format!(
             "Encoding single file {} ({})",
