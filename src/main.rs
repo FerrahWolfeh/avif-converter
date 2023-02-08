@@ -1,7 +1,5 @@
 use std::{
-    fmt::Write,
-    fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant},
 };
@@ -10,13 +8,14 @@ use bytesize::ByteSize;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use image_avif::ImageFile;
-use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use indicatif::ProgressBar;
 use owo_colors::OwoColorize;
 use rayon::{prelude::*, ThreadPoolBuilder};
-use spinoff::{spinners, Color, Spinner, Streams};
+use utils::{bar_style, search_dir, ConsoleMsg};
 
 mod image_avif;
 mod name_fun;
+mod utils;
 
 use crate::name_fun::Name;
 
@@ -58,10 +57,7 @@ fn main() -> Result<()> {
         num_cpus::get()
     };
 
-    ThreadPoolBuilder::new()
-        .num_threads(thread_num)
-        .build_global()
-        .unwrap();
+    let pool = ThreadPoolBuilder::new().num_threads(thread_num).build()?;
 
     if args.path.is_dir() {
         let mut console = ConsoleMsg::new(args.quiet);
@@ -92,27 +88,32 @@ fn main() -> Result<()> {
             thread_num / paths.len()
         };
 
-        paths.into_par_iter().with_max_len(1).for_each(|item| {
-            if let Ok(size) = item.full_convert(
-                args.quality,
-                args.speed,
-                threads,
-                Some(progress_bar.clone()),
-                args.name_type,
-                args.keep,
-            ) {
-                final_stats.fetch_add(size, Ordering::SeqCst);
-                success_count.fetch_add(1, Ordering::SeqCst);
-            } else {
-                global_ctr.fetch_add(1, Ordering::SeqCst);
-            }
+        pool.install(|| {
+            paths.into_par_iter().with_max_len(1).for_each(|item| {
+                if let Ok(size) = item.full_convert(
+                    args.quality,
+                    args.speed,
+                    threads,
+                    Some(progress_bar.clone()),
+                    args.name_type,
+                    args.keep,
+                ) {
+                    final_stats.fetch_add(size, Ordering::SeqCst);
+                    success_count.fetch_add(1, Ordering::SeqCst);
+                } else {
+                    global_ctr.fetch_add(1, Ordering::SeqCst);
+                }
+            })
         });
 
         let elapsed = start.elapsed();
 
         progress_bar.finish();
 
-        let texts = ["Original folder size".bold().0, "New folder size".bold().0];
+        let texts = [
+            *"Original folder size".bold().0,
+            *"New folder size".bold().0,
+        ];
 
         let delta =
             ((final_stats.load(Ordering::SeqCst) as f32 / initial_size as f32) * 100.) - 100.;
@@ -161,71 +162,4 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-struct ConsoleMsg {
-    spinner: Option<Spinner>,
-    quiet: bool,
-}
-
-impl ConsoleMsg {
-    #[must_use]
-    pub fn new(quiet: bool) -> Self {
-        Self {
-            spinner: None,
-            quiet,
-        }
-    }
-
-    pub fn set_spinner(&mut self, message: &'static str) {
-        if !self.quiet {
-            let spinner =
-                Spinner::new_with_stream(spinners::Dots, message, Color::Green, Streams::Stderr);
-
-            self.spinner = Some(spinner);
-        }
-    }
-
-    pub fn finish_spinner(mut self, message: &str) -> Self {
-        if let Some(spin) = self.spinner {
-            spin.success(message);
-            self.spinner = None
-        }
-
-        self
-    }
-
-    pub fn print_message(&self, message: String) {
-        if !self.quiet {
-            println!("{message}");
-        }
-    }
-}
-
-fn search_dir(dir: &Path) -> Vec<ImageFile> {
-    let paths = fs::read_dir(dir).unwrap();
-
-    Vec::from_iter(paths.filter_map(|entry| {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if let Ok(image_file) = ImageFile::from_path(&path) {
-            return Some(image_file);
-        }
-        None
-    }))
-}
-
-fn bar_style() -> ProgressStyle {
-    let template = "{spinner:.red.bold} {elapsed_precise:.bold} [{wide_bar:.blue.bold}] {percent:.bold} {pos:.bold} (eta. {eta})";
-
-    ProgressStyle::default_bar()
-        .template(template)
-        .unwrap()
-        .with_key("pos", |state: &ProgressState, w: &mut dyn Write| {
-            write!(w, "{}/{}", state.pos(), state.len().unwrap()).unwrap();
-        })
-        .with_key("percent", |state: &ProgressState, w: &mut dyn Write| {
-            write!(w, "{:>3.0}%", state.fraction() * 100_f32).unwrap();
-        })
-        .progress_chars("# ")
 }
