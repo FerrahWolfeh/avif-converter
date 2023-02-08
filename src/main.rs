@@ -69,10 +69,8 @@ fn main() -> Result<()> {
 
         let con = console.finish_spinner(&format!("Found {psize} files."));
 
-        let final_stats: AtomicU64 = AtomicU64::new(0);
-        let success_count: AtomicU64 = AtomicU64::new(0);
-
-        let global_ctr: AtomicU64 = AtomicU64::new(0);
+        let (final_stats, success_count, global_ctr) =
+            (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0));
 
         let initial_size: u64 = paths.iter().map(|item| item.size).sum();
 
@@ -80,13 +78,13 @@ fn main() -> Result<()> {
 
         progress_bar.enable_steady_tick(Duration::from_millis(100));
 
-        let start = Instant::now();
-
         let threads = if paths.len() >= thread_num {
             1
         } else {
             thread_num / paths.len()
         };
+
+        let start = Instant::now();
 
         pool.install(|| {
             paths.into_par_iter().with_max_len(1).for_each(|item| {
