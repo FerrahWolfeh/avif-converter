@@ -134,7 +134,7 @@ fn main() -> Result<()> {
             percentage
         ));
     } else if args.path.is_file() {
-        let image = ImageFile::from_path(&args.path)?;
+        let image = ImageFile::load_from_path(&args.path)?;
 
         console.print_message(format!(
             "Encoding single file {} ({})",
@@ -144,16 +144,19 @@ fn main() -> Result<()> {
 
         console.set_spinner("Processing...");
 
-        let fsz = image.convert_to_avif(args.quality, args.speed, thread_num, None)?;
+        let fsz = image.convert_to_avif_stored(args.quality, args.speed, thread_num, None)?;
 
         image.save_avif(&fsz, args.name_type, args.keep)?;
 
+        let ssim = image.calculate_ssim(&fsz)?;
+
         console.finish_spinner(&format!(
-            "Encoding finished ({})",
+            "Encoding finished ({}) | SSIM: {:.6}",
             ByteSize::b(fsz.len() as u64)
                 .to_string_as(true)
                 .bold()
-                .green()
+                .green(),
+            ssim
         ));
     }
 
