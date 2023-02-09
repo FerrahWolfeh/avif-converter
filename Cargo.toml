@@ -3,7 +3,7 @@ name = "avif-converter"
 description = "Simple tool to batch convert multiple images to AVIF"
 authors = ["Ferrah Aiko <ferrahwolfeh@proton.me>"]
 license = "MIT"
-version = "1.0.1"
+version = "1.1.0"
 edition = "2021"
 readme = ""
 
@@ -29,5 +29,5 @@ spinoff = "0.7.0"
 
 [package.metadata.arch]
 arch = ["x86_64", "aarch64"]
-makedepends = ["cargo", "nasm"]
+makedepends = ["cargo", "nasm", "libwebp", "lcms2"]
 pkgrel = "1"

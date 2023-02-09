@@ -4,7 +4,7 @@ pkgrel=1
 pkgdesc='Custom avif image converter made with Rust'
 arch=('i686' 'x86_64' 'armv7h' 'aarch64')
 license=('GPL3')
-makedepends=('cargo' 'nasm')
+makedepends=('cargo' 'nasm' 'lcms2' 'libwebp')
 
 build () {
   cd "$srcdir/avif-converter"
