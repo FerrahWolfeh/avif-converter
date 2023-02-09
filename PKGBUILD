@@ -1,5 +1,5 @@
-pkgname=avif-converter-git
-pkgver=1.0.1
+pkgname=avif-converter
+pkgver=1.1.0
 pkgrel=1
 pkgdesc='Custom avif image converter made with Rust'
 arch=('i686' 'x86_64' 'armv7h' 'aarch64')
