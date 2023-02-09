@@ -87,7 +87,7 @@ fn main() -> Result<()> {
         let start = Instant::now();
 
         pool.install(|| {
-            paths.into_par_iter().with_max_len(1).for_each(|item| {
+            paths.into_par_iter().with_max_len(1).for_each(|mut item| {
                 if let Ok(size) = item.full_convert(
                     args.quality,
                     args.speed,
@@ -134,7 +134,7 @@ fn main() -> Result<()> {
             percentage
         ));
     } else if args.path.is_file() {
-        let image = ImageFile::load_from_path(&args.path)?;
+        let mut image = ImageFile::load_from_path(&args.path)?;
 
         console.print_message(format!(
             "Encoding single file {} ({})",
@@ -146,16 +146,13 @@ fn main() -> Result<()> {
 
         let fsz = image.convert_to_avif_stored(args.quality, args.speed, thread_num, None)?;
 
-        image.save_avif(&fsz, args.name_type, args.keep)?;
+        image.save_avif(args.name_type, args.keep)?;
 
-        let ssim = image.calculate_ssim(&fsz)?;
+        let ssim = image.calculate_ssim()?;
 
         console.finish_spinner(&format!(
             "Encoding finished ({}) | SSIM: {:.6}",
-            ByteSize::b(fsz.len() as u64)
-                .to_string_as(true)
-                .bold()
-                .green(),
+            ByteSize::b(fsz).to_string_as(true).bold().green(),
             ssim
         ));
     }
