@@ -1,16 +1,25 @@
-# Maintainer: Ferrah Aiko <ferrahwolfeh@proton.me>
-pkgname=avif-converter
+pkgname=avif-converter-git
 pkgver=1.1.0
 pkgrel=1
-makedepends=('rust' 'cargo')
-arch=('x86_64')
-pkgdesc="Simple tool to batch convert multiple images to AVIF"
+source=("git+https://git.solstice-x0.arpa/FerrahWolfeh/avif-converter.git")
+sha256sums=('SKIP')
+pkgdesc='Custom avif image converter made with Rust'
+arch=('i686' 'x86_64' 'armv7h' 'aarch64')
 license=('GPL3')
+makedepends=('cargo' 'nasm')
 
-build() {
-    return 0
+build () {
+  cd "$srcdir/avif-converter"
+
+  if [[ $CARCH != x86_64 ]]; then
+    export CARGO_PROFILE_RELEASE_LTO=off
+  fi
+
+  cargo build --locked --release --target-dir target
 }
 
 package() {
-    cargo install --root="$pkgdir" avif-converter
+  cd "$srcdir/avif-converter"
+
+  install -Dm755 target/release/avif-converter "${pkgdir}/usr/bin/avif-converter"
 }
