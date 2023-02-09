@@ -1,23 +1,16 @@
+# Maintainer: Ferrah Aiko <ferrahwolfeh@proton.me>
 pkgname=avif-converter
 pkgver=1.1.0
 pkgrel=1
-pkgdesc='Custom avif image converter made with Rust'
-arch=('i686' 'x86_64' 'armv7h' 'aarch64')
+makedepends=('rust' 'cargo')
+arch=('i686' 'x86_64' 'armv6h' 'armv7h')
+pkgdesc="Simple tool to batch convert multiple images to AVIF"
 license=('GPL3')
-makedepends=('cargo' 'nasm' 'lcms2' 'libwebp')
 
-build () {
-  cd "$srcdir/avif-converter"
-
-  if [[ $CARCH != x86_64 ]]; then
-    export CARGO_PROFILE_RELEASE_LTO=off
-  fi
-
-  cargo build --locked --release --target-dir target
+build() {
+    return 0
 }
 
 package() {
-  cd "$srcdir/avif-converter"
-
-  install -Dm755 target/release/avif-converter "${pkgdir}/usr/bin/avif-converter"
+    cargo install --root="$pkgdir" avif-converter
 }
