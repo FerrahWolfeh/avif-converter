@@ -3,7 +3,7 @@ pkgname=avif-converter
 pkgver=1.1.0
 pkgrel=1
 makedepends=('rust' 'cargo')
-arch=('i686' 'x86_64' 'armv6h' 'armv7h')
+arch=('x86_64')
 pkgdesc="Simple tool to batch convert multiple images to AVIF"
 license=('GPL3')
 
