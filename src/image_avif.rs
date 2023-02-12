@@ -1,12 +1,14 @@
 use color_eyre::eyre::{bail, Result};
 use dssim_core::Dssim;
+use imgref::Img;
 use indicatif::ProgressBar;
+use libavif::decode_rgb;
 use load_image::{
     export::imgref::{ImgVec, ImgVecKind},
-    load_data, load_path,
+    load_path,
 };
-use ravif::{Encoder, Img, RGBA8};
-use rgb::{ComponentMap, RGBA};
+use ravif::Encoder;
+use rgb::{ComponentMap, FromSlice, RGBA, RGBA8};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -32,26 +34,6 @@ pub struct ImageOutInfo {
 }
 
 impl ImageFile {
-    pub fn from_path(path: &Path) -> Result<Self> {
-        if let Some(ext) = path.extension() {
-            if !(ext == "jpg" || ext == "png" || ext == "jpeg" || ext == "jfif" || ext == "webp") {
-                bail!("Unsupported image format");
-            }
-        } else {
-            bail!("Invalid file extension");
-        }
-
-        Ok(Self {
-            path: path.to_path_buf(),
-            name: path.file_name().unwrap().to_string_lossy().to_string(),
-            size: path.metadata()?.len(),
-            bitmap: None,
-            avif_data: vec![],
-            height: 0,
-            width: 0,
-        })
-    }
-
     pub fn load_from_path(path: &Path) -> Result<Self> {
         if let Some(ext) = path.extension() {
             if !(ext == "jpg" || ext == "png" || ext == "jpeg" || ext == "jfif" || ext == "webp") {
@@ -102,33 +84,6 @@ impl ImageFile {
         Ok(self.avif_data.len() as u64)
     }
 
-    pub fn convert_to_avif(
-        &mut self,
-        quality: u8,
-        speed: u8,
-        threads: usize,
-        progress: Option<ProgressBar>,
-    ) -> Result<u64> {
-        let raw = load_path(&self.path)?.into_imgvec();
-        let raw_img = Self::load_rgba_data(raw)?;
-
-        let encoder = Encoder::new()
-            .with_num_threads(Some(threads))
-            .with_alpha_quality(100.)
-            .with_quality(quality as f32)
-            .with_speed(speed);
-
-        let encoded_img = encoder.encode_rgba(raw_img.as_ref())?;
-
-        self.avif_data = encoded_img.avif_file;
-
-        if let Some(pb) = progress {
-            pb.inc(1);
-        }
-
-        Ok(self.avif_data.len() as u64)
-    }
-
     pub fn calculate_ssim(&self) -> Result<f64> {
         let binding = self.bitmap.clone().unwrap();
         let og_img = binding.into_buf();
@@ -137,12 +92,10 @@ impl ImageFile {
             .create_image_rgba(&og_img, self.width, self.height)
             .unwrap();
 
-        let raw = load_data(&self.avif_data)?.into_imgvec();
-
-        let avif_pix_data = Self::load_rgba_data(raw)?;
+        let avif_pix_data = decode_rgb(&self.avif_data)?;
 
         let image_new_dssim = Dssim::new()
-            .create_image_rgba(avif_pix_data.into_buf().as_ref(), self.width, self.height)
+            .create_image_rgba(avif_pix_data.as_rgba(), self.width, self.height)
             .unwrap();
 
         let ssim: f64 = Dssim::new()

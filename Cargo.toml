@@ -17,16 +17,18 @@ color-eyre = "0.6.2"
 dssim-core = "3.2.5"
 env_logger = "0.10.0"
 hex = "0.4.3"
+imgref = "1.9.4"
 indicatif = { version = "0.17.3", features = ["rayon"] }
-load_image = { version = "3.0.3", features = ["avif", "webp"] }
+libavif = { version = "0.11.0", default_features = false, features = ["codec-dav1d"] }
+load_image = { version = "3.0.3", features = ["webp"] }
 log = "0.4.17"
 md5 = "0.7.0"
 num_cpus = "1.15.0"
 owo-colors = "3.5.0"
 rand = "0.8.5"
-ravif = "0.11"
+ravif = "0.11.1"
 rayon = "1.6.1"
-rgb = "0.8.34"
+rgb = "0.8.35"
 sha2 = { version = "0.10.6", features = ["asm", "asm-aarch64"] }
 spinoff = "0.7.0"
 
