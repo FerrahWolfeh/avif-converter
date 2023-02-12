@@ -73,6 +73,8 @@ fn main() -> Result<()> {
         let paths = search_dir(&args.path);
         let psize = paths.len();
 
+        let con = console.finish_spinner(&format!("Found {psize} files."));
+
         if log_enabled!(Level::Debug) {
             let mem_size: usize = paths
                 .iter()
@@ -85,12 +87,10 @@ fn main() -> Result<()> {
                 })
                 .sum();
             debug!(
-                "All files loaded occupy {} of RAM",
+                "All loaded files occupy {} RAM",
                 ByteSize::b(mem_size as u64).to_string_as(true)
             );
         };
-
-        let con = console.finish_spinner(&format!("Found {psize} files."));
 
         let (final_stats, success_count, global_ctr) =
             (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0));
