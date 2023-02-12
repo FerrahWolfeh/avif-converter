@@ -1,16 +1,21 @@
 use std::{
+    mem::size_of,
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant},
 };
 
+use atomic_float::AtomicF64;
 use bytesize::ByteSize;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use image_avif::ImageFile;
 use indicatif::ProgressBar;
+use log::{debug, log_enabled, Level};
 use owo_colors::OwoColorize;
+use ravif::Img;
 use rayon::{prelude::*, ThreadPoolBuilder};
+use rgb::RGBA;
 use utils::{bar_style, search_dir, ConsoleMsg};
 
 mod image_avif;
@@ -49,6 +54,7 @@ struct Args {
 
 fn main() -> Result<()> {
     color_eyre::install()?;
+    env_logger::builder().format_timestamp(None).init();
     let args: Args = Args::parse();
 
     let thread_num = if args.threads > 0 {
@@ -67,10 +73,29 @@ fn main() -> Result<()> {
         let paths = search_dir(&args.path);
         let psize = paths.len();
 
+        if log_enabled!(Level::Debug) {
+            let mem_size: usize = paths
+                .iter()
+                .map(|item| {
+                    let vsize = size_of::<Option<Img<Vec<RGBA<u8>>>>>();
+                    let unw_item = item.bitmap.as_ref().unwrap();
+                    let mem_byte_usg = unw_item.buf().len() * 4;
+
+                    vsize + mem_byte_usg
+                })
+                .sum();
+            debug!(
+                "All files loaded occupy {} of RAM",
+                ByteSize::b(mem_size as u64).to_string_as(true)
+            );
+        };
+
         let con = console.finish_spinner(&format!("Found {psize} files."));
 
         let (final_stats, success_count, global_ctr) =
             (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0));
+
+        let global_ssim = AtomicF64::new(0.0);
 
         let initial_size: u64 = paths.iter().map(|item| item.size).sum();
 
@@ -88,7 +113,7 @@ fn main() -> Result<()> {
 
         pool.install(|| {
             paths.into_par_iter().with_max_len(1).for_each(|mut item| {
-                if let Ok(size) = item.full_convert(
+                if let Ok(results) = item.full_convert(
                     args.quality,
                     args.speed,
                     threads,
@@ -96,8 +121,9 @@ fn main() -> Result<()> {
                     args.name_type,
                     args.keep,
                 ) {
-                    final_stats.fetch_add(size, Ordering::SeqCst);
+                    final_stats.fetch_add(results.size, Ordering::SeqCst);
                     success_count.fetch_add(1, Ordering::SeqCst);
+                    global_ssim.fetch_add(results.ssim, Ordering::SeqCst);
                 } else {
                     global_ctr.fetch_add(1, Ordering::SeqCst);
                 }
@@ -125,13 +151,14 @@ fn main() -> Result<()> {
         };
 
         con.print_message(format!(
-            "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({})",
+            "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({}) | Mean SSIM: {:.8}",
             success_count.load(Ordering::SeqCst),
             texts[0],
             ByteSize::b(initial_size).to_string_as(true).blue().bold(),
             texts[1],
             ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
-            percentage
+            percentage,
+            global_ssim.load(Ordering::SeqCst) / psize as f64
         ));
     } else if args.path.is_file() {
         let mut image = ImageFile::load_from_path(&args.path)?;

@@ -3,20 +3,23 @@ name = "avif-converter"
 description = "Simple tool to batch convert multiple images to AVIF"
 authors = ["Ferrah Aiko <ferrahwolfeh@proton.me>"]
 license = "MIT"
-version = "1.1.0"
+version = "1.1.5"
 edition = "2021"
 readme = ""
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+atomic_float = "0.1.0"
 bytesize = "1.1.0"
 clap = { version = "4.1.4", features = ["derive", "cargo"] }
 color-eyre = "0.6.2"
 dssim-core = "3.2.5"
+env_logger = "0.10.0"
 hex = "0.4.3"
 indicatif = { version = "0.17.3", features = ["rayon"] }
 load_image = { version = "3.0.3", features = ["avif", "webp"] }
+log = "0.4.17"
 md5 = "0.7.0"
 num_cpus = "1.15.0"
 owo-colors = "3.5.0"

@@ -25,6 +25,12 @@ pub struct ImageFile {
     width: usize,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct ImageOutInfo {
+    pub size: u64,
+    pub ssim: f64,
+}
+
 impl ImageFile {
     pub fn from_path(path: &Path) -> Result<Self> {
         if let Some(ext) = path.extension() {
@@ -170,11 +176,13 @@ impl ImageFile {
         bar: Option<ProgressBar>,
         name: Name,
         keep: bool,
-    ) -> Result<u64> {
-        let fdata = self.convert_to_avif(quality, speed, threads, bar)?;
+    ) -> Result<ImageOutInfo> {
+        let fdata = self.convert_to_avif_stored(quality, speed, threads, bar)?;
         self.save_avif(name, keep)?;
 
-        Ok(fdata)
+        let ssim = self.calculate_ssim()?;
+
+        Ok(ImageOutInfo { size: fdata, ssim })
     }
 
     fn load_rgba_data(data: ImgVecKind) -> Result<ImgVec<RGBA8>> {

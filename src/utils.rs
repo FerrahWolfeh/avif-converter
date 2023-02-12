@@ -50,7 +50,7 @@ pub fn search_dir(dir: &Path) -> Vec<ImageFile> {
     Vec::from_iter(paths.filter_map(|entry| {
         let entry = entry.unwrap();
         let path = entry.path();
-        if let Ok(image_file) = ImageFile::from_path(&path) {
+        if let Ok(image_file) = ImageFile::load_from_path(&path) {
             return Some(image_file);
         }
         None
