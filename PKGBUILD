@@ -15,7 +15,7 @@ build () {
     export CARGO_PROFILE_RELEASE_LTO=off
   fi
 
-  cargo build --locked --release --target-dir target
+  cargo build --release --target-dir target
 }
 
 package() {
