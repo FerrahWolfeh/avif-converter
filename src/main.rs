@@ -158,7 +158,7 @@ fn main() -> Result<()> {
             texts[1],
             ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
             percentage,
-            global_ssim.load(Ordering::SeqCst) / psize as f64
+            global_ssim.load(Ordering::SeqCst) / success_count.load(Ordering::SeqCst) as f64
         ));
     } else if args.path.is_file() {
         let mut image = ImageFile::load_from_path(&args.path)?;
