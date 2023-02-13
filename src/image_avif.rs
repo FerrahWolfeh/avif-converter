@@ -121,6 +121,7 @@ impl ImageFile {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn full_convert(
         &mut self,
         quality: u8,
@@ -129,11 +130,12 @@ impl ImageFile {
         bar: Option<ProgressBar>,
         name: Name,
         keep: bool,
+        ssim: bool,
     ) -> Result<ImageOutInfo> {
         let fdata = self.convert_to_avif_stored(quality, speed, threads, bar)?;
         self.save_avif(name, keep)?;
 
-        let ssim = self.calculate_ssim()?;
+        let ssim = if ssim { self.calculate_ssim()? } else { 0.0 };
 
         Ok(ImageOutInfo { size: fdata, ssim })
     }

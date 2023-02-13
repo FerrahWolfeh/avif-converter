@@ -50,6 +50,10 @@ struct Args {
     /// Keep original file
     #[clap(short, long, default_value_t = false)]
     keep: bool,
+
+    /// Calculate the SSIM metric of the original end encoded files. Might use a lot of RAM with very big images.
+    #[clap(long = "ssim", default_value_t = false)]
+    calculate_ssim: bool,
 }
 
 fn main() -> Result<()> {
@@ -120,6 +124,7 @@ fn main() -> Result<()> {
                     Some(progress_bar.clone()),
                     args.name_type,
                     args.keep,
+                    args.calculate_ssim,
                 ) {
                     final_stats.fetch_add(results.size, Ordering::SeqCst);
                     success_count.fetch_add(1, Ordering::SeqCst);
@@ -150,16 +155,28 @@ fn main() -> Result<()> {
             format!("{}", st1.red())
         };
 
-        con.print_message(format!(
-            "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({}) | Mean SSIM: {:.8}",
-            success_count.load(Ordering::SeqCst),
-            texts[0],
-            ByteSize::b(initial_size).to_string_as(true).blue().bold(),
-            texts[1],
-            ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
-            percentage,
-            global_ssim.load(Ordering::SeqCst) / success_count.load(Ordering::SeqCst) as f64
-        ));
+        if args.calculate_ssim {
+            con.print_message(format!(
+                "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({}) | Mean SSIM: {:.8}",
+                success_count.load(Ordering::SeqCst),
+                texts[0],
+                ByteSize::b(initial_size).to_string_as(true).blue().bold(),
+                texts[1],
+                ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
+                percentage,
+                global_ssim.load(Ordering::SeqCst) / success_count.load(Ordering::SeqCst) as f64
+            ));
+        } else {
+            con.print_message(format!(
+                "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({})",
+                success_count.load(Ordering::SeqCst),
+                texts[0],
+                ByteSize::b(initial_size).to_string_as(true).blue().bold(),
+                texts[1],
+                ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
+                percentage
+            ));
+        }
     } else if args.path.is_file() {
         let mut image = ImageFile::load_from_path(&args.path)?;
 
@@ -175,13 +192,20 @@ fn main() -> Result<()> {
 
         image.save_avif(args.name_type, args.keep)?;
 
-        let ssim = image.calculate_ssim()?;
+        if args.calculate_ssim {
+            let ssim = image.calculate_ssim()?;
 
-        console.finish_spinner(&format!(
-            "Encoding finished ({}) | SSIM: {:.6}",
-            ByteSize::b(fsz).to_string_as(true).bold().green(),
-            ssim
-        ));
+            console.finish_spinner(&format!(
+                "Encoding finished ({}) | SSIM: {:.6}",
+                ByteSize::b(fsz).to_string_as(true).bold().green(),
+                ssim
+            ));
+        } else {
+            console.finish_spinner(&format!(
+                "Encoding finished ({})",
+                ByteSize::b(fsz).to_string_as(true).bold().green()
+            ));
+        }
     }
 
     Ok(())
