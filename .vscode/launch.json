@@ -1,0 +1,57 @@
+{
+    // Use o IntelliSense para saber mais sobre os atributos possíveis.
+    // Focalizar para exibir as descrições dos atributos existentes.
+    // Para obter mais informações, acesse: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'avif-converter'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=avif-converter",
+                    "--package=avif-converter"
+                ],
+                "filter": {
+                    "name": "avif-converter",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "-s",
+                "6",
+                "-k",
+                "--ssim",
+                "/mnt/ram/97297934f6fb8517c46c6492e4875458.png"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'avif-converter'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=avif-converter",
+                    "--package=avif-converter"
+                ],
+                "filter": {
+                    "name": "avif-converter",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "-s",
+                "6",
+                "-k",
+                "--ssim",
+                "/mnt/ram/97297934f6fb8517c46c6492e4875458.png"
+            ],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
