@@ -122,7 +122,15 @@ fn main() -> Result<()> {
         pool.install(|| {
             if let Some(bs) = args.batch_size {
                 while !paths.is_empty() {
-                    let chunk = Vec::from_iter(paths.drain(..bs));
+                    let chunk_len = bs.min(paths.len());
+
+                    let chunk = Vec::from_iter(paths.drain(..chunk_len));
+
+                    let threads = if chunk_len >= thread_num {
+                        1
+                    } else {
+                        thread_num / chunk_len
+                    };
 
                     if log_enabled!(Level::Debug) {
                         let mem_size: usize = chunk
@@ -137,7 +145,7 @@ fn main() -> Result<()> {
                             .sum();
                         debug!(
                             "File batch with size {} occupies {} RAM",
-                            bs,
+                            chunk_len,
                             ByteSize::b(mem_size as u64).to_string_as(true)
                         );
                     };
@@ -203,11 +211,11 @@ fn main() -> Result<()> {
 
         let times = {
             let ratio = final_stats.load(Ordering::Relaxed) as f32 / initial_size as f32;
-            if ratio < 0. {
-                let st1 = format!("{ratio:.2}X smaller");
+            if ratio > 0. {
+                let st1 = format!("~{ratio:.2}X smaller");
                 format!("{}", st1.green())
             } else {
-                let st1 = format!("{ratio:.2}X bigger");
+                let st1 = format!("~{ratio:.2}X bigger");
                 format!("{}", st1.red())
             }
         };
@@ -226,13 +234,14 @@ fn main() -> Result<()> {
             ));
         } else {
             con.print_message(format!(
-                "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({})",
+                "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({} or {})",
                 success_count.load(Ordering::SeqCst),
                 texts[0],
                 ByteSize::b(initial_size).to_string_as(true).blue().bold(),
                 texts[1],
                 ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
-                percentage
+                percentage,
+                times
             ));
         }
     } else if args.path.is_file() {
