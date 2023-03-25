@@ -43,6 +43,10 @@ struct Args {
     #[clap(short, long, default_value_t = 0, value_name = "THREADS")]
     threads: usize,
 
+    /// How many images to keep in memory at once
+    #[clap(short, long, default_value_t = num_cpus::get())]
+    batch_size: usize,
+
     /// Supress console messages
     #[clap(long, default_value_t = false)]
     quiet: bool,
@@ -74,7 +78,7 @@ fn main() -> Result<()> {
     if args.path.is_dir() {
         console.set_spinner("Searching for files...");
 
-        let paths = search_dir(&args.path);
+        let mut paths = search_dir(&args.path);
         let psize = paths.len();
 
         let con = console.finish_spinner(&format!("Found {psize} files."));
@@ -116,23 +120,45 @@ fn main() -> Result<()> {
         let start = Instant::now();
 
         pool.install(|| {
-            paths.into_par_iter().with_max_len(1).for_each(|mut item| {
-                if let Ok(results) = item.full_convert(
-                    args.quality,
-                    args.speed,
-                    threads,
-                    Some(progress_bar.clone()),
-                    args.name_type,
-                    args.keep,
-                    args.calculate_ssim,
-                ) {
-                    final_stats.fetch_add(results.size, Ordering::SeqCst);
-                    success_count.fetch_add(1, Ordering::SeqCst);
-                    global_ssim.fetch_add(results.ssim, Ordering::SeqCst);
-                } else {
-                    global_ctr.fetch_add(1, Ordering::SeqCst);
-                }
-            })
+            while !paths.is_empty() {
+                let chunk = Vec::from_iter(paths.drain(..args.batch_size));
+
+                if log_enabled!(Level::Debug) {
+                    let mem_size: usize = chunk
+                        .iter()
+                        .map(|item| {
+                            let vsize = size_of::<Option<Img<Vec<RGBA<u8>>>>>();
+                            let unw_item = item.bitmap.as_ref().unwrap();
+                            let mem_byte_usg = unw_item.buf().len() * 4;
+
+                            vsize + mem_byte_usg
+                        })
+                        .sum();
+                    debug!(
+                        "File batch with size {} occupies {} RAM",
+                        args.batch_size,
+                        ByteSize::b(mem_size as u64).to_string_as(true)
+                    );
+                };
+
+                chunk.into_par_iter().with_max_len(1).for_each(|mut item| {
+                    if let Ok(results) = item.full_convert(
+                        args.quality,
+                        args.speed,
+                        threads,
+                        Some(progress_bar.clone()),
+                        args.name_type,
+                        args.keep,
+                        args.calculate_ssim,
+                    ) {
+                        final_stats.fetch_add(results.size, Ordering::SeqCst);
+                        success_count.fetch_add(1, Ordering::SeqCst);
+                        global_ssim.fetch_add(results.ssim, Ordering::SeqCst);
+                    } else {
+                        global_ctr.fetch_add(1, Ordering::SeqCst);
+                    }
+                });
+            }
         });
 
         let elapsed = start.elapsed();
