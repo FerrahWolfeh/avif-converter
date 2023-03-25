@@ -201,15 +201,27 @@ fn main() -> Result<()> {
             format!("{}", st1.red())
         };
 
+        let times = {
+            let ratio = final_stats.load(Ordering::Relaxed) as f32 / initial_size as f32;
+            if ratio < 0. {
+                let st1 = format!("{ratio:.2}X smaller");
+                format!("{}", st1.green())
+            } else {
+                let st1 = format!("{ratio:.2}X bigger");
+                format!("{}", st1.red())
+            }
+        };
+
         if args.calculate_ssim {
             con.print_message(format!(
-                "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({}) | Mean SSIM: {:.8}",
+                "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({} or {}) | Mean SSIM: {:.8}",
                 success_count.load(Ordering::SeqCst),
                 texts[0],
                 ByteSize::b(initial_size).to_string_as(true).blue().bold(),
                 texts[1],
                 ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
                 percentage,
+                times,
                 global_ssim.load(Ordering::SeqCst) / success_count.load(Ordering::SeqCst) as f64
             ));
         } else {
