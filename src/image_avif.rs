@@ -1,14 +1,14 @@
 use color_eyre::eyre::{bail, Result};
-use dssim_core::Dssim;
+//use dssim_core::Dssim;
 use imgref::Img;
 use indicatif::ProgressBar;
-use libavif::decode_rgb;
+//use libavif::decode_rgb;
 use load_image::{
     export::imgref::{ImgVec, ImgVecKind},
     load_path,
 };
 use ravif::Encoder;
-use rgb::{ComponentMap, FromSlice, RGBA, RGBA8};
+use rgb::{ComponentMap, RGBA, RGBA8};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -22,14 +22,15 @@ pub struct ImageFile {
     pub name: String,
     pub size: u64,
     pub bitmap: Option<Img<Vec<RGBA<u8>>>>,
-    avif_data: Vec<u8>,
-    height: usize,
-    width: usize,
+    pub avif_data: Vec<u8>,
+    pub height: usize,
+    pub width: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct ImageOutInfo {
     pub size: u64,
+    #[cfg(feature = "ssim")]
     pub ssim: f64,
 }
 
@@ -84,28 +85,6 @@ impl ImageFile {
         Ok(self.avif_data.len() as u64)
     }
 
-    pub fn calculate_ssim(&self) -> Result<f64> {
-        let binding = self.bitmap.clone().unwrap();
-        let og_img = binding.into_buf();
-
-        let image_original = Dssim::new()
-            .create_image_rgba(&og_img, self.width, self.height)
-            .unwrap();
-
-        let avif_pix_data = decode_rgb(&self.avif_data)?;
-
-        let image_new_dssim = Dssim::new()
-            .create_image_rgba(avif_pix_data.as_rgba(), self.width, self.height)
-            .unwrap();
-
-        let ssim: f64 = Dssim::new()
-            .compare(&image_original, image_new_dssim)
-            .0
-            .into();
-
-        Ok(ssim)
-    }
-
     pub fn save_avif(&self, name: Name, keep: bool) -> Result<()> {
         let fname = name.generate_name(&self.avif_data);
 
@@ -130,14 +109,15 @@ impl ImageFile {
         bar: Option<ProgressBar>,
         name: Name,
         keep: bool,
-        ssim: bool,
     ) -> Result<ImageOutInfo> {
         let fdata = self.convert_to_avif_stored(quality, speed, threads, bar)?;
         self.save_avif(name, keep)?;
 
-        let ssim = if ssim { self.calculate_ssim()? } else { 0.0 };
-
-        Ok(ImageOutInfo { size: fdata, ssim })
+        Ok(ImageOutInfo {
+            size: fdata,
+            #[cfg(feature = "ssim")]
+            ssim: 0.0,
+        })
     }
 
     fn load_rgba_data(data: ImgVecKind) -> Result<ImgVec<RGBA8>> {

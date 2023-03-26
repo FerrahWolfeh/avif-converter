@@ -1,10 +1,4 @@
-use std::{
-    mem::size_of,
-    path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
-    time::{Duration, Instant},
-};
-
+#[cfg(feature = "ssim")]
 use atomic_float::AtomicF64;
 use bytesize::ByteSize;
 use clap::Parser;
@@ -16,10 +10,19 @@ use log::{debug, log_enabled, Level};
 use owo_colors::OwoColorize;
 use rayon::{prelude::*, ThreadPoolBuilder};
 use rgb::RGBA;
+use std::{
+    mem::size_of,
+    path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
+    time::{Duration, Instant},
+};
 use utils::{bar_style, search_dir, ConsoleMsg};
 
 mod image_avif;
 mod name_fun;
+
+#[cfg(feature = "ssim")]
+mod ssim;
 mod utils;
 
 use crate::name_fun::Name;
@@ -55,6 +58,7 @@ struct Args {
     #[clap(short, long, default_value_t = false)]
     keep: bool,
 
+    #[cfg(feature = "ssim")]
     /// Calculate the SSIM metric of the original end encoded files. Might use a lot of RAM with very big images.
     #[clap(long = "ssim", default_value_t = false)]
     calculate_ssim: bool,
@@ -103,6 +107,7 @@ fn main() -> Result<()> {
         let (final_stats, success_count, global_ctr) =
             (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0));
 
+        #[cfg(feature = "ssim")]
         let global_ssim = AtomicF64::new(0.0);
 
         let initial_size: u64 = paths.iter().map(|item| item.size).sum();
@@ -158,10 +163,11 @@ fn main() -> Result<()> {
                             Some(progress_bar.clone()),
                             args.name_type,
                             args.keep,
-                            args.calculate_ssim,
                         ) {
                             final_stats.fetch_add(results.size, Ordering::SeqCst);
                             success_count.fetch_add(1, Ordering::SeqCst);
+
+                            #[cfg(feature = "ssim")]
                             global_ssim.fetch_add(results.ssim, Ordering::SeqCst);
                         } else {
                             global_ctr.fetch_add(1, Ordering::SeqCst);
@@ -177,10 +183,11 @@ fn main() -> Result<()> {
                         Some(progress_bar.clone()),
                         args.name_type,
                         args.keep,
-                        args.calculate_ssim,
                     ) {
                         final_stats.fetch_add(results.size, Ordering::SeqCst);
                         success_count.fetch_add(1, Ordering::SeqCst);
+
+                        #[cfg(feature = "ssim")]
                         global_ssim.fetch_add(results.ssim, Ordering::SeqCst);
                     } else {
                         global_ctr.fetch_add(1, Ordering::SeqCst);
@@ -220,6 +227,7 @@ fn main() -> Result<()> {
             }
         };
 
+        #[cfg(feature = "ssim")]
         if args.calculate_ssim {
             con.print_message(format!(
                 "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({} or {}) | Mean SSIM: {:.8}",
@@ -232,18 +240,19 @@ fn main() -> Result<()> {
                 times,
                 global_ssim.load(Ordering::SeqCst) / success_count.load(Ordering::SeqCst) as f64
             ));
-        } else {
-            con.print_message(format!(
-                "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({} or {})",
-                success_count.load(Ordering::SeqCst),
-                texts[0],
-                ByteSize::b(initial_size).to_string_as(true).blue().bold(),
-                texts[1],
-                ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
-                percentage,
-                times
-            ));
+            return Ok(());
         }
+
+        con.print_message(format!(
+            "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({} or {})",
+            success_count.load(Ordering::SeqCst),
+            texts[0],
+            ByteSize::b(initial_size).to_string_as(true).blue().bold(),
+            texts[1],
+            ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
+            percentage,
+            times
+        ));
     } else if args.path.is_file() {
         let mut image = ImageFile::load_from_path(&args.path)?;
 
@@ -259,20 +268,26 @@ fn main() -> Result<()> {
 
         image.save_avif(args.name_type, args.keep)?;
 
+        #[cfg(feature = "ssim")]
         if args.calculate_ssim {
+            use crate::ssim::CalculateSSIM;
             let ssim = image.calculate_ssim()?;
 
             console.finish_spinner(&format!(
                 "Encoding finished ({}) | SSIM: {:.6}",
-                ByteSize::b(fsz).to_string_as(true).bold().green(),
+                ByteSize::b(image.avif_data.len() as u64)
+                    .to_string_as(true)
+                    .bold()
+                    .green(),
                 ssim
             ));
-        } else {
-            console.finish_spinner(&format!(
-                "Encoding finished ({})",
-                ByteSize::b(fsz).to_string_as(true).bold().green()
-            ));
+            return Ok(());
         }
+
+        console.finish_spinner(&format!(
+            "Encoding finished ({})",
+            ByteSize::b(fsz).to_string_as(true).bold().green()
+        ));
     }
 
     Ok(())
