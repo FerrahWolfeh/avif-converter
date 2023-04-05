@@ -155,24 +155,28 @@ fn main() -> Result<()> {
                         );
                     };
 
-                    chunk.into_par_iter().with_max_len(1).for_each(|mut item| {
-                        if let Ok(results) = item.full_convert(
-                            args.quality,
-                            args.speed,
-                            threads,
-                            Some(progress_bar.clone()),
-                            args.name_type,
-                            args.keep,
-                        ) {
-                            final_stats.fetch_add(results.size, Ordering::SeqCst);
-                            success_count.fetch_add(1, Ordering::SeqCst);
+                    chunk
+                        .into_par_iter()
+                        .with_max_len(1)
+                        .with_min_len(1)
+                        .for_each(|mut item| {
+                            if let Ok(results) = item.full_convert(
+                                args.quality,
+                                args.speed,
+                                threads,
+                                Some(progress_bar.clone()),
+                                args.name_type,
+                                args.keep,
+                            ) {
+                                final_stats.fetch_add(results.size, Ordering::SeqCst);
+                                success_count.fetch_add(1, Ordering::SeqCst);
 
-                            #[cfg(feature = "ssim")]
-                            global_ssim.fetch_add(results.ssim, Ordering::SeqCst);
-                        } else {
-                            global_ctr.fetch_add(1, Ordering::SeqCst);
-                        }
-                    });
+                                #[cfg(feature = "ssim")]
+                                global_ssim.fetch_add(results.ssim, Ordering::SeqCst);
+                            } else {
+                                global_ctr.fetch_add(1, Ordering::SeqCst);
+                            }
+                        });
                 }
             } else {
                 paths.into_par_iter().with_max_len(1).for_each(|mut item| {
