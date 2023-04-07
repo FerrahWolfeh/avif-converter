@@ -19,6 +19,7 @@ use crate::name_fun::Name;
 #[derive(Debug, Clone)]
 pub struct ImageFile {
     pub path: PathBuf,
+    pub filename: String,
     pub name: String,
     pub size: u64,
     pub bitmap: Option<Img<Vec<RGBA<u8>>>>,
@@ -52,7 +53,8 @@ impl ImageFile {
 
         Ok(Self {
             path: path.to_path_buf(),
-            name: path.file_name().unwrap().to_string_lossy().to_string(),
+            filename: path.file_name().unwrap().to_string_lossy().to_string(),
+            name: path.file_stem().unwrap().to_string_lossy().to_string(),
             size: path.metadata()?.len(),
             bitmap: Some(r2),
             avif_data: vec![],
@@ -86,7 +88,7 @@ impl ImageFile {
     }
 
     pub fn save_avif(&self, name: Name, keep: bool) -> Result<()> {
-        let fname = name.generate_name(&self.avif_data);
+        let fname = name.generate_name(self);
 
         let binding = self.path.canonicalize()?;
         let fpath = binding.parent().unwrap();

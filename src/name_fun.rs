@@ -2,30 +2,34 @@ use clap::ValueEnum;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use sha2::{Digest, Sha256};
 
+use crate::image_avif::ImageFile;
+
 #[derive(Debug, ValueEnum, Copy, Clone)]
 #[repr(u8)]
 pub enum Name {
     MD5,
     SHA256,
     Random,
+    Same,
 }
 
 impl Name {
-    pub fn generate_name(self, data: &[u8]) -> String {
+    pub fn generate_name(self, data: &ImageFile) -> String {
         match self {
             Name::MD5 => {
-                let digest = md5::compute(data);
+                let digest = md5::compute(&data.avif_data);
 
                 format!("{digest:x}")
             }
             Name::SHA256 => {
                 let mut hasher = Sha256::new();
 
-                hasher.update(data);
+                hasher.update(&data.avif_data);
 
                 hex::encode(hasher.finalize())
             }
             Name::Random => Self::random_string(),
+            Name::Same => data.name.clone(),
         }
     }
 
