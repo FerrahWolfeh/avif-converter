@@ -38,6 +38,7 @@ pub struct ImageOutInfo {
 impl ImageFile {
     pub fn load_from_path(path: &Path) -> Result<Self> {
         if let Some(ext) = path.extension() {
+            let ext = ext.to_string_lossy().to_lowercase();
             if !(ext == "jpg" || ext == "png" || ext == "jpeg" || ext == "jfif" || ext == "webp") {
                 bail!("Unsupported image format");
             }
