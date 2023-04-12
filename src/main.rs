@@ -2,14 +2,10 @@ use bytesize::ByteSize;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use image_avif::ImageFile;
-use imgref::Img;
 use indicatif::ProgressBar;
-use log::{debug, log_enabled, Level};
 use owo_colors::OwoColorize;
 use rayon::{prelude::*, ThreadPoolBuilder};
-use rgb::RGBA;
 use std::{
-    mem::size_of,
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
     time::{Duration, Instant},
@@ -78,23 +74,6 @@ fn main() -> Result<()> {
 
         let con = console.finish_spinner(&format!("Found {psize} files."));
 
-        if log_enabled!(Level::Debug) {
-            let mem_size: usize = paths
-                .iter()
-                .map(|item| {
-                    let vsize = size_of::<Option<Img<Vec<RGBA<u8>>>>>();
-                    let unw_item = item.bitmap.as_ref().unwrap();
-                    let mem_byte_usg = unw_item.buf().len() * 4;
-
-                    vsize + mem_byte_usg
-                })
-                .sum();
-            debug!(
-                "All loaded files occupy {} RAM",
-                ByteSize::b(mem_size as u64).to_string_as(true)
-            );
-        };
-
         let (final_stats, success_count, global_ctr) =
             (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0));
 
@@ -123,24 +102,6 @@ fn main() -> Result<()> {
                         1
                     } else {
                         thread_num / chunk_len
-                    };
-
-                    if log_enabled!(Level::Debug) {
-                        let mem_size: usize = chunk
-                            .iter()
-                            .map(|item| {
-                                let vsize = size_of::<Option<Img<Vec<RGBA<u8>>>>>();
-                                let unw_item = item.bitmap.as_ref().unwrap();
-                                let mem_byte_usg = unw_item.buf().len() * 4;
-
-                                vsize + mem_byte_usg
-                            })
-                            .sum();
-                        debug!(
-                            "File batch with size {} occupies {} RAM",
-                            chunk_len,
-                            ByteSize::b(mem_size as u64).to_string_as(true)
-                        );
                     };
 
                     chunk
