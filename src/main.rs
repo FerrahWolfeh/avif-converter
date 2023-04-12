@@ -4,10 +4,13 @@ use color_eyre::eyre::Result;
 use image_avif::ImageFile;
 use indicatif::ProgressBar;
 use owo_colors::OwoColorize;
-use rayon::{prelude::*, ThreadPoolBuilder};
 use std::{
     path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, Arc, Mutex,
+    },
+    thread::spawn,
     time::{Duration, Instant},
 };
 use utils::{bar_style, search_dir, ConsoleMsg};
@@ -51,6 +54,10 @@ struct Args {
     keep: bool,
 }
 
+static GLOBAL_COUNTER: AtomicU64 = AtomicU64::new(0);
+static SUCCESS_COUNT: AtomicU64 = AtomicU64::new(0);
+static FINAL_STATS: AtomicU64 = AtomicU64::new(0);
+
 fn main() -> Result<()> {
     color_eyre::install()?;
     env_logger::builder().format_timestamp(None).init();
@@ -62,20 +69,15 @@ fn main() -> Result<()> {
         num_cpus::get()
     };
 
-    let pool = ThreadPoolBuilder::new().num_threads(thread_num).build()?;
-
     let mut console = ConsoleMsg::new(args.quiet);
 
     if args.path.is_dir() {
         console.set_spinner("Searching for files...");
 
-        let mut paths = search_dir(&args.path);
+        let paths = search_dir(&args.path);
         let psize = paths.len();
 
         let con = console.finish_spinner(&format!("Found {psize} files."));
-
-        let (final_stats, success_count, global_ctr) =
-            (AtomicU64::new(0), AtomicU64::new(0), AtomicU64::new(0));
 
         let initial_size: u64 = paths.iter().map(|item| item.size).sum();
 
@@ -89,43 +91,16 @@ fn main() -> Result<()> {
             thread_num / paths.len()
         };
 
-        let start = Instant::now();
+        let (tx, rx) = mpsc::sync_channel(thread_num);
 
-        pool.install(|| {
-            if let Some(bs) = args.batch_size {
-                while !paths.is_empty() {
-                    let chunk_len = bs.min(paths.len());
+        let rx = Arc::new(Mutex::new(rx));
 
-                    let chunk = Vec::from_iter(paths.drain(..chunk_len));
-
-                    let threads = if chunk_len >= thread_num {
-                        1
-                    } else {
-                        thread_num / chunk_len
-                    };
-
-                    chunk
-                        .into_par_iter()
-                        .with_max_len(1)
-                        .with_min_len(1)
-                        .for_each(|mut item| {
-                            if let Ok(results) = item.full_convert(
-                                args.quality,
-                                args.speed,
-                                threads,
-                                Some(progress_bar.clone()),
-                                args.name_type,
-                                args.keep,
-                            ) {
-                                final_stats.fetch_add(results.size, Ordering::SeqCst);
-                                success_count.fetch_add(1, Ordering::SeqCst);
-                            } else {
-                                global_ctr.fetch_add(1, Ordering::SeqCst);
-                            }
-                        });
-                }
-            } else {
-                paths.into_par_iter().with_max_len(1).for_each(|mut item| {
+        for _ in 0..thread_num {
+            let rx = rx.clone();
+            let progress_bar = progress_bar.clone();
+            spawn(move || {
+                while let Ok(item) = rx.lock().unwrap().recv() {
+                    let mut item: ImageFile = item;
                     if let Ok(results) = item.full_convert(
                         args.quality,
                         args.speed,
@@ -134,14 +109,20 @@ fn main() -> Result<()> {
                         args.name_type,
                         args.keep,
                     ) {
-                        final_stats.fetch_add(results.size, Ordering::SeqCst);
-                        success_count.fetch_add(1, Ordering::SeqCst);
+                        SUCCESS_COUNT.fetch_add(results.size, Ordering::SeqCst);
+                        FINAL_STATS.fetch_add(1, Ordering::SeqCst);
                     } else {
-                        global_ctr.fetch_add(1, Ordering::SeqCst);
+                        GLOBAL_COUNTER.fetch_add(1, Ordering::SeqCst);
                     }
-                });
-            }
-        });
+                }
+            });
+        }
+
+        let start = Instant::now();
+
+        for item in paths {
+            tx.send(item)?;
+        }
 
         let elapsed = start.elapsed();
 
@@ -153,7 +134,7 @@ fn main() -> Result<()> {
         ];
 
         let delta =
-            ((final_stats.load(Ordering::SeqCst) as f32 / initial_size as f32) * 100.) - 100.;
+            ((FINAL_STATS.load(Ordering::SeqCst) as f32 / initial_size as f32) * 100.) - 100.;
 
         let percentage = if delta < 0. {
             let st1 = format!("{delta:.2}%");
@@ -164,7 +145,7 @@ fn main() -> Result<()> {
         };
 
         let times = {
-            let ratio = final_stats.load(Ordering::Relaxed) as f32 / initial_size as f32;
+            let ratio = FINAL_STATS.load(Ordering::Relaxed) as f32 / initial_size as f32;
             if ratio > 0. {
                 let st1 = format!("~{ratio:.2}X smaller");
                 format!("{}", st1.green())
@@ -176,11 +157,11 @@ fn main() -> Result<()> {
 
         con.print_message(format!(
             "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({} or {})",
-            success_count.load(Ordering::SeqCst),
+            SUCCESS_COUNT.load(Ordering::SeqCst),
             texts[0],
             ByteSize::b(initial_size).to_string_as(true).blue().bold(),
             texts[1],
-            ByteSize::b(final_stats.load(Ordering::SeqCst)).to_string_as(true),
+            ByteSize::b(FINAL_STATS.load(Ordering::SeqCst)).to_string_as(true),
             percentage,
             times
         ));
