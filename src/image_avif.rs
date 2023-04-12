@@ -31,8 +31,6 @@ pub struct ImageFile {
 #[derive(Debug, Copy, Clone)]
 pub struct ImageOutInfo {
     pub size: u64,
-    #[cfg(feature = "ssim")]
-    pub ssim: f64,
 }
 
 impl ImageFile {
@@ -64,6 +62,42 @@ impl ImageFile {
         })
     }
 
+    pub fn new_from_path(path: &Path) -> Result<Self> {
+        if let Some(ext) = path.extension() {
+            let ext = ext.to_string_lossy().to_lowercase();
+            if !(ext == "jpg" || ext == "png" || ext == "jpeg" || ext == "jfif" || ext == "webp") {
+                bail!("Unsupported image format");
+            }
+        } else {
+            bail!("Invalid file extension");
+        }
+
+        Ok(Self {
+            path: path.to_path_buf(),
+            filename: path.file_name().unwrap().to_string_lossy().to_string(),
+            name: path.file_stem().unwrap().to_string_lossy().to_string(),
+            size: path.metadata()?.len(),
+            bitmap: None,
+            avif_data: vec![],
+            height: 0,
+            width: 0,
+        })
+    }
+
+    pub fn load_image_data(&mut self) -> Result<()> {
+        let raw = load_path(&self.path)?.into_imgvec();
+
+        let r2 = Self::load_rgba_data(raw)?;
+
+        let (width, height) = (r2.width(), r2.height());
+
+        self.bitmap = Some(r2);
+        self.width = width;
+        self.height = height;
+
+        Ok(())
+    }
+
     pub fn convert_to_avif_stored(
         &mut self,
         quality: u8,
@@ -71,6 +105,10 @@ impl ImageFile {
         threads: usize,
         progress: Option<ProgressBar>,
     ) -> Result<u64> {
+        if self.bitmap.is_none() {
+            self.load_image_data()?;
+        }
+
         let encoder = Encoder::new()
             .with_num_threads(Some(threads))
             .with_alpha_quality(100.)
@@ -116,11 +154,7 @@ impl ImageFile {
         let fdata = self.convert_to_avif_stored(quality, speed, threads, bar)?;
         self.save_avif(name, keep)?;
 
-        Ok(ImageOutInfo {
-            size: fdata,
-            #[cfg(feature = "ssim")]
-            ssim: 0.0,
-        })
+        Ok(ImageOutInfo { size: fdata })
     }
 
     fn load_rgba_data(data: ImgVecKind) -> Result<ImgVec<RGBA8>> {
