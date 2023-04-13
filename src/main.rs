@@ -3,6 +3,7 @@ use clap::Parser;
 use color_eyre::eyre::Result;
 use image_avif::ImageFile;
 use indicatif::ProgressBar;
+use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
 use std::{
     path::PathBuf,
@@ -57,6 +58,7 @@ struct Args {
 static GLOBAL_COUNTER: AtomicU64 = AtomicU64::new(0);
 static SUCCESS_COUNT: AtomicU64 = AtomicU64::new(0);
 static FINAL_STATS: AtomicU64 = AtomicU64::new(0);
+static PROGRESS_BAR: Lazy<ProgressBar> = Lazy::new(|| ProgressBar::new(0).with_style(bar_style()));
 
 fn main() -> Result<()> {
     color_eyre::install()?;
@@ -81,9 +83,9 @@ fn main() -> Result<()> {
 
         let initial_size: u64 = paths.iter().map(|item| item.size).sum();
 
-        let progress_bar = ProgressBar::new(paths.len() as u64).with_style(bar_style());
+        PROGRESS_BAR.set_length(paths.len() as u64);
 
-        progress_bar.enable_steady_tick(Duration::from_millis(100));
+        PROGRESS_BAR.enable_steady_tick(Duration::from_millis(100));
 
         let threads = if paths.len() >= thread_num {
             1
@@ -95,17 +97,18 @@ fn main() -> Result<()> {
 
         let rx = Arc::new(Mutex::new(rx));
 
+        let mut handles = Vec::with_capacity(thread_num);
+
         for _ in 0..thread_num {
             let rx = rx.clone();
-            let progress_bar = progress_bar.clone();
-            spawn(move || {
+            let handle = spawn(move || {
                 while let Ok(item) = rx.lock().unwrap().recv() {
                     let mut item: ImageFile = item;
                     if let Ok(results) = item.full_convert(
                         args.quality,
                         args.speed,
                         threads,
-                        Some(progress_bar.clone()),
+                        Some(PROGRESS_BAR.clone()),
                         args.name_type,
                         args.keep,
                     ) {
@@ -116,6 +119,7 @@ fn main() -> Result<()> {
                     }
                 }
             });
+            handles.push(handle);
         }
 
         let start = Instant::now();
@@ -124,9 +128,13 @@ fn main() -> Result<()> {
             tx.send(item)?;
         }
 
+        for handle in handles {
+            handle.join().expect("Failed to join thread");
+        }
+
         let elapsed = start.elapsed();
 
-        progress_bar.finish();
+        PROGRESS_BAR.finish();
 
         let texts = [
             *"Original folder size".bold().0,
