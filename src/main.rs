@@ -157,8 +157,14 @@ fn main() -> Result<()> {
             *"New folder size".bold().0,
         ];
 
-        let delta =
-            ((FINAL_STATS.load(Ordering::SeqCst) as f32 / initial_size as f32) * 100.) - 100.;
+        dbg!(FINAL_STATS.load(Ordering::Relaxed));
+        dbg!(initial_size);
+
+        let initial_delta = FINAL_STATS.load(Ordering::Relaxed) as f32 / initial_size as f32;
+
+        let delta = (initial_delta * 100.) - 100.;
+
+        dbg!(delta);
 
         let percentage = if delta < 0. {
             let st1 = format!("{delta:.2}%");
@@ -169,12 +175,13 @@ fn main() -> Result<()> {
         };
 
         let times = {
-            let ratio = FINAL_STATS.load(Ordering::Relaxed) as f32 / initial_size as f32;
+            let ratio = 1. / initial_delta;
+            dbg!(ratio);
             if ratio > 0. {
-                let st1 = format!("~{:.0}X smaller", ratio * 100.);
+                let st1 = format!("~{:.1}X smaller", ratio);
                 format!("{}", st1.green())
             } else {
-                let st1 = format!("~{:.0}X bigger", ratio * 100.);
+                let st1 = format!("~{:.1}X bigger", ratio);
                 format!("{}", st1.red())
             }
         };
@@ -185,7 +192,10 @@ fn main() -> Result<()> {
             texts[0],
             ByteSize::b(initial_size).to_string_as(true).blue().bold(),
             texts[1],
-            ByteSize::b(FINAL_STATS.load(Ordering::SeqCst)).to_string_as(true),
+            ByteSize::b(FINAL_STATS.load(Ordering::SeqCst))
+                .to_string_as(true)
+                .green()
+                .bold(),
             percentage,
             times
         ));
