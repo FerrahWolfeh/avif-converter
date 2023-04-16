@@ -1,9 +1,13 @@
-use std::{fmt::Write, fs, path::Path};
+use std::{fmt::Write, fs, path::Path, time::Duration};
 
-use indicatif::{ProgressState, ProgressStyle};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use once_cell::sync::Lazy;
 use spinoff::{spinners, Color, Spinner, Streams};
 
 use crate::image_avif::ImageFile;
+
+pub static PROGRESS_BAR: Lazy<ProgressBar> =
+    Lazy::new(|| ProgressBar::new(0).with_style(bar_style()));
 
 pub struct ConsoleMsg {
     spinner: Option<Spinner>,
@@ -40,6 +44,20 @@ impl ConsoleMsg {
     pub fn print_message(&self, message: String) {
         if !self.quiet {
             println!("{message}");
+        }
+    }
+
+    pub fn setup_bar(&self, len: u64) {
+        if !self.quiet {
+            PROGRESS_BAR.set_length(len);
+
+            PROGRESS_BAR.enable_steady_tick(Duration::from_millis(100));
+        }
+    }
+
+    pub fn finish_bar(&self) {
+        if !self.quiet {
+            PROGRESS_BAR.finish_and_clear();
         }
     }
 }

@@ -2,8 +2,7 @@ use bytesize::ByteSize;
 use clap::Parser;
 use color_eyre::eyre::Result;
 use image_avif::ImageFile;
-use indicatif::ProgressBar;
-use once_cell::sync::Lazy;
+use log::debug;
 use owo_colors::OwoColorize;
 use std::{
     path::PathBuf,
@@ -12,16 +11,16 @@ use std::{
         mpsc, Arc, Mutex,
     },
     thread::spawn,
-    time::{Duration, Instant},
+    time::Instant,
 };
-use utils::{bar_style, search_dir, ConsoleMsg};
+use utils::{search_dir, ConsoleMsg};
 
 mod image_avif;
 mod name_fun;
 
 mod utils;
 
-use crate::name_fun::Name;
+use crate::{name_fun::Name, utils::PROGRESS_BAR};
 
 #[derive(Debug, Clone, Parser)]
 struct Args {
@@ -55,10 +54,9 @@ struct Args {
     keep: bool,
 }
 
-static GLOBAL_COUNTER: AtomicU64 = AtomicU64::new(0);
 static SUCCESS_COUNT: AtomicU64 = AtomicU64::new(0);
 static FINAL_STATS: AtomicU64 = AtomicU64::new(0);
-static PROGRESS_BAR: Lazy<ProgressBar> = Lazy::new(|| ProgressBar::new(0).with_style(bar_style()));
+static ITEMS_PROCESSED: AtomicU64 = AtomicU64::new(0);
 
 fn main() -> Result<()> {
     color_eyre::install()?;
@@ -83,9 +81,7 @@ fn main() -> Result<()> {
 
         let initial_size: u64 = paths.iter().map(|item| item.size).sum();
 
-        PROGRESS_BAR.set_length(paths.len() as u64);
-
-        PROGRESS_BAR.enable_steady_tick(Duration::from_millis(100));
+        con.setup_bar(psize as u64);
 
         let threads = if paths.len() >= thread_num {
             1
@@ -101,23 +97,41 @@ fn main() -> Result<()> {
 
         for _ in 0..thread_num {
             let rx = rx.clone();
-            let handle = spawn(move || {
-                while let Ok(item) = rx.lock().unwrap().recv() {
-                    let mut item: ImageFile = item;
-                    if let Ok(results) = item.full_convert(
-                        args.quality,
-                        args.speed,
-                        threads,
-                        Some(PROGRESS_BAR.clone()),
-                        args.name_type,
-                        args.keep,
-                    ) {
-                        SUCCESS_COUNT.fetch_add(results.size, Ordering::SeqCst);
-                        FINAL_STATS.fetch_add(1, Ordering::SeqCst);
-                    } else {
-                        GLOBAL_COUNTER.fetch_add(1, Ordering::SeqCst);
-                    }
+            let handle = spawn(move || loop {
+                let rx_handle = rx.lock().unwrap();
+
+                let mut item: ImageFile = if let Ok(item) = rx_handle.recv() {
+                    item
+                } else {
+                    break;
+                };
+
+                drop(rx_handle);
+
+                let bar = if args.quiet {
+                    None
+                } else {
+                    Some(PROGRESS_BAR.clone())
+                };
+
+                if let Ok(results) = item.full_convert(
+                    args.quality,
+                    args.speed,
+                    threads,
+                    bar,
+                    args.name_type,
+                    args.keep,
+                ) {
+                    SUCCESS_COUNT.fetch_add(1, Ordering::SeqCst);
+                    FINAL_STATS.fetch_add(results.size, Ordering::SeqCst);
                 }
+
+                ITEMS_PROCESSED.fetch_add(1, Ordering::SeqCst);
+
+                debug!(
+                    "Items Processed: {}",
+                    ITEMS_PROCESSED.load(Ordering::Relaxed)
+                );
             });
             handles.push(handle);
         }
@@ -128,13 +142,15 @@ fn main() -> Result<()> {
             tx.send(item)?;
         }
 
+        drop(tx);
+
         for handle in handles {
-            handle.join().expect("Failed to join thread");
+            handle.join().unwrap();
         }
 
         let elapsed = start.elapsed();
 
-        PROGRESS_BAR.finish();
+        con.finish_bar();
 
         let texts = [
             *"Original folder size".bold().0,
@@ -155,10 +171,10 @@ fn main() -> Result<()> {
         let times = {
             let ratio = FINAL_STATS.load(Ordering::Relaxed) as f32 / initial_size as f32;
             if ratio > 0. {
-                let st1 = format!("~{ratio:.2}X smaller");
+                let st1 = format!("~{:.0}X smaller", ratio * 100.);
                 format!("{}", st1.green())
             } else {
-                let st1 = format!("~{ratio:.2}X bigger");
+                let st1 = format!("~{:.0}X bigger", ratio * 100.);
                 format!("{}", st1.red())
             }
         };

@@ -3,7 +3,7 @@ name = "avif-converter"
 description = "Simple tool to batch convert multiple images to AVIF"
 authors = ["Ferrah Aiko <ferrahwolfeh@proton.me>"]
 license = "MIT"
-version = "1.4.0-3"
+version = "1.4.1"
 edition = "2021"
 readme = ""
 
@@ -26,7 +26,6 @@ num_cpus = "1.15.0"
 owo-colors = "3.5.0"
 rand = "0.8.5"
 ravif = "0.11.1"
-rayon = "1.7.0"
 rgb = "0.8.36"
 sha2 = { version = "0.10.6", features = ["asm"] }
 spinoff = "0.7.0"
