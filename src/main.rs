@@ -65,6 +65,8 @@ fn main() -> Result<()> {
         num_cpus::get()
     };
 
+    dbg!(thread_num);
+
     let pool = ThreadPool::new(thread_num);
 
     let mut console = ConsoleMsg::new(args.quiet);
@@ -122,6 +124,9 @@ fn main() -> Result<()> {
             let mut item = item.clone();
             pool.execute(move || process_image(&mut item))
         }
+
+        debug!("Total of {} jobs queued", pool.queued_count());
+        debug!("Pool has {} waiting threads", pool.active_count());
 
         pool.join();
 
