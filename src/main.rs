@@ -6,18 +6,14 @@ use log::debug;
 use owo_colors::OwoColorize;
 use std::{
     path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        mpsc, Arc, Mutex,
-    },
-    thread::spawn,
+    sync::atomic::{AtomicU64, Ordering},
     time::Instant,
 };
+use threadpool::ThreadPool;
 use utils::{search_dir, ConsoleMsg};
 
 mod image_avif;
 mod name_fun;
-
 mod utils;
 
 use crate::{name_fun::Name, utils::PROGRESS_BAR};
@@ -69,6 +65,8 @@ fn main() -> Result<()> {
         num_cpus::get()
     };
 
+    let pool = ThreadPool::new(thread_num);
+
     let mut console = ConsoleMsg::new(args.quiet);
 
     if args.path.is_dir() {
@@ -89,25 +87,8 @@ fn main() -> Result<()> {
             thread_num / paths.len()
         };
 
-        let (tx, rx) = mpsc::sync_channel(thread_num);
-
-        let rx = Arc::new(Mutex::new(rx));
-
-        let mut handles = Vec::with_capacity(thread_num);
-
-        for _ in 0..thread_num {
-            let rx = rx.clone();
-            let handle = spawn(move || loop {
-                let rx_handle = rx.lock().unwrap();
-
-                let mut item: ImageFile = if let Ok(item) = rx_handle.recv() {
-                    item
-                } else {
-                    break;
-                };
-
-                drop(rx_handle);
-
+        let process_image = {
+            move |item: &mut ImageFile| {
                 let bar = if args.quiet {
                     None
                 } else {
@@ -132,21 +113,17 @@ fn main() -> Result<()> {
                     "Items Processed: {}",
                     ITEMS_PROCESSED.load(Ordering::Relaxed)
                 );
-            });
-            handles.push(handle);
-        }
+            }
+        };
 
         let start = Instant::now();
 
         for item in paths {
-            tx.send(item)?;
+            let mut item = item.clone();
+            pool.execute(move || process_image(&mut item))
         }
 
-        drop(tx);
-
-        for handle in handles {
-            handle.join().unwrap();
-        }
+        pool.join();
 
         let elapsed = start.elapsed();
 
