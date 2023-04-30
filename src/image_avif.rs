@@ -1,14 +1,9 @@
 use color_eyre::eyre::{bail, Result};
-//use dssim_core::Dssim;
+use image::{io::Reader, ImageFormat, RgbaImage};
 use imgref::Img;
 use indicatif::ProgressBar;
-//use libavif::decode_rgb;
-use load_image::{
-    export::imgref::{ImgVec, ImgVecKind},
-    load_path,
-};
 use ravif::Encoder;
-use rgb::{ComponentMap, RGBA, RGBA8};
+use rgb::FromSlice;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -21,46 +16,25 @@ pub struct ImageFile {
     pub path: PathBuf,
     pub filename: String,
     pub name: String,
+    pub extension: String,
     pub size: u64,
-    pub bitmap: Option<Img<Vec<RGBA<u8>>>>,
-    pub avif_data: Vec<u8>,
-    pub height: usize,
-    pub width: usize,
+    pub bitmap: RgbaImage,
+    pub encoded_data: Vec<u8>,
+    pub height: u32,
+    pub width: u32,
 }
 
 impl ImageFile {
-    pub fn load_from_path(path: &Path) -> Result<Self> {
-        if let Some(ext) = path.extension() {
-            let ext = ext.to_string_lossy().to_lowercase();
-            if !(ext == "jpg" || ext == "png" || ext == "jpeg" || ext == "jfif" || ext == "webp") {
-                bail!("Unsupported image format");
-            }
-        } else {
-            bail!("Invalid file extension");
-        }
-
-        let raw = load_path(path)?.into_imgvec();
-
-        let r2 = Self::load_rgba_data(raw)?;
-
-        let (width, height) = (r2.width(), r2.height());
-
-        Ok(Self {
-            path: path.to_path_buf(),
-            filename: path.file_name().unwrap().to_string_lossy().to_string(),
-            name: path.file_stem().unwrap().to_string_lossy().to_string(),
-            size: path.metadata()?.len(),
-            bitmap: Some(r2),
-            avif_data: vec![],
-            height,
-            width,
-        })
-    }
-
     pub fn new_from_path(path: &Path) -> Result<Self> {
         if let Some(ext) = path.extension() {
             let ext = ext.to_string_lossy().to_lowercase();
-            if !(ext == "jpg" || ext == "png" || ext == "jpeg" || ext == "jfif" || ext == "webp") {
+            if !(ext == "jpg"
+                || ext == "png"
+                || ext == "jpeg"
+                || ext == "jfif"
+                || ext == "webp"
+                || ext == "bmp")
+            {
                 bail!("Unsupported image format");
             }
         } else {
@@ -71,22 +45,26 @@ impl ImageFile {
             path: path.to_path_buf(),
             filename: path.file_name().unwrap().to_string_lossy().to_string(),
             name: path.file_stem().unwrap().to_string_lossy().to_string(),
+            extension: path.extension().unwrap().to_string_lossy().to_string(),
             size: path.metadata()?.len(),
-            bitmap: None,
-            avif_data: vec![],
+            bitmap: RgbaImage::new(0, 0),
+            encoded_data: vec![],
             height: 0,
             width: 0,
         })
     }
 
     pub fn load_image_data(&mut self) -> Result<()> {
-        let raw = load_path(&self.path)?.into_imgvec();
+        let mut image_data = Reader::open(&self.path)?;
 
-        let r2 = Self::load_rgba_data(raw)?;
+        image_data.set_format(ImageFormat::from_extension(&self.extension).unwrap());
 
-        let (width, height) = (r2.width(), r2.height());
+        let raw_image = image_data.decode()?;
+        let rgb_data = raw_image.to_rgba8();
 
-        self.bitmap = Some(r2);
+        let (width, height) = (raw_image.width(), raw_image.height());
+
+        self.bitmap = rgb_data;
         self.width = width;
         self.height = height;
 
@@ -100,9 +78,11 @@ impl ImageFile {
         threads: usize,
         progress: Option<ProgressBar>,
     ) -> Result<u64> {
-        if self.bitmap.is_none() {
+        if self.bitmap.is_empty() {
             self.load_image_data()?;
         }
+
+        assert!(!self.bitmap.is_empty());
 
         let encoder = Encoder::new()
             .with_num_threads(Some(threads))
@@ -110,15 +90,19 @@ impl ImageFile {
             .with_quality(quality as f32)
             .with_speed(speed);
 
-        let encoded_img = encoder.encode_rgba(self.bitmap.as_ref().unwrap().as_ref())?;
+        let encoded_img = encoder.encode_rgba(Img::new(
+            self.bitmap.as_rgba(),
+            self.width as usize,
+            self.height as usize,
+        ))?;
 
-        self.avif_data = encoded_img.avif_file;
+        self.encoded_data = encoded_img.avif_file;
 
         if let Some(pb) = progress {
             pb.inc(1);
         }
 
-        Ok(self.avif_data.len() as u64)
+        Ok(self.encoded_data.len() as u64)
     }
 
     pub fn save_avif(&self, name: Name, keep: bool) -> Result<()> {
@@ -127,7 +111,7 @@ impl ImageFile {
         let binding = self.path.canonicalize()?;
         let fpath = binding.parent().unwrap();
 
-        fs::write(fpath.join(format!("{fname}.avif")), &self.avif_data)?;
+        fs::write(fpath.join(format!("{fname}.avif")), &self.encoded_data)?;
 
         if !keep {
             fs::remove_file(&self.path)?;
@@ -138,58 +122,5 @@ impl ImageFile {
 
     pub fn original_name(&self) -> String {
         self.filename.clone()
-    }
-
-    fn load_rgba_data(data: ImgVecKind) -> Result<ImgVec<RGBA8>> {
-        let img = match data {
-            load_image::export::imgref::ImgVecKind::RGB8(img) => {
-                img.map_buf(|buf| buf.into_iter().map(|px| px.alpha(255)).collect())
-            }
-            load_image::export::imgref::ImgVecKind::RGBA8(img) => img,
-            load_image::export::imgref::ImgVecKind::RGB16(img) => img.map_buf(|buf| {
-                buf.into_iter()
-                    .map(|px| px.map(|c| (c >> 8) as u8).alpha(255))
-                    .collect()
-            }),
-            load_image::export::imgref::ImgVecKind::RGBA16(img) => img.map_buf(|buf| {
-                buf.into_iter()
-                    .map(|px| px.map(|c| (c >> 8) as u8))
-                    .collect()
-            }),
-            load_image::export::imgref::ImgVecKind::GRAY8(img) => img.map_buf(|buf| {
-                buf.into_iter()
-                    .map(|g| {
-                        let c = g.0;
-                        RGBA8::new(c, c, c, 255)
-                    })
-                    .collect()
-            }),
-            load_image::export::imgref::ImgVecKind::GRAY16(img) => img.map_buf(|buf| {
-                buf.into_iter()
-                    .map(|g| {
-                        let c = (g.0 >> 8) as u8;
-                        RGBA8::new(c, c, c, 255)
-                    })
-                    .collect()
-            }),
-            load_image::export::imgref::ImgVecKind::GRAYA8(img) => img.map_buf(|buf| {
-                buf.into_iter()
-                    .map(|g| {
-                        let c = g.0;
-                        RGBA8::new(c, c, c, g.1)
-                    })
-                    .collect()
-            }),
-            load_image::export::imgref::ImgVecKind::GRAYA16(img) => img.map_buf(|buf| {
-                buf.into_iter()
-                    .map(|g| {
-                        let c = (g.0 >> 8) as u8;
-                        RGBA8::new(c, c, c, (g.1 >> 8) as u8)
-                    })
-                    .collect()
-            }),
-        };
-
-        Ok(img)
     }
 }

@@ -1,11 +1,10 @@
 use bytesize::ByteSize;
-use clap::Parser;
+use cli::Args;
 use color_eyre::eyre::Result;
 use image_avif::ImageFile;
 use log::{debug, trace};
 use owo_colors::OwoColorize;
 use std::{
-    path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
     thread::{self, sleep},
     time::{Duration, Instant},
@@ -13,47 +12,12 @@ use std::{
 use threadpool::ThreadPool;
 use utils::{search_dir, ConsoleMsg};
 
+mod cli;
 mod image_avif;
 mod name_fun;
 mod utils;
 
-use crate::{name_fun::Name, utils::PROGRESS_BAR};
-
-#[derive(Debug, Clone, Parser)]
-struct Args {
-    /// File or directory containing images to convert
-    #[clap(value_name = "PATH")]
-    path: PathBuf,
-
-    #[clap(short, long, default_value_t = 70, value_name = "QUALITY")]
-    quality: u8,
-
-    #[clap(short, long, default_value_t = 4, value_name = "SPEED")]
-    speed: u8,
-
-    #[clap(short, long, value_enum, default_value_t = Name::MD5)]
-    name_type: Name,
-
-    /// Defaults to number of CPU cores. Use 0 for all cores
-    #[clap(short, long, default_value_t = 0, value_name = "THREADS")]
-    threads: usize,
-
-    /// How many images to keep in memory at once
-    #[clap(short, long)]
-    batch_size: Option<usize>,
-
-    /// Supress console messages
-    #[clap(long, default_value_t = false)]
-    quiet: bool,
-
-    /// Keep original file
-    #[clap(short, long, default_value_t = false)]
-    keep: bool,
-
-    /// Enable benchmark mode (will not save any file after encode)
-    #[clap(long, default_value_t = false)]
-    benchmark: bool,
-}
+use crate::utils::PROGRESS_BAR;
 
 static SUCCESS_COUNT: AtomicU64 = AtomicU64::new(0);
 static FINAL_STATS: AtomicU64 = AtomicU64::new(0);
@@ -89,14 +53,14 @@ fn calculate_tread_count(num_threads: usize, num_items: usize) -> ThreadCount {
 fn main() -> Result<()> {
     color_eyre::install()?;
     env_logger::builder().format_timestamp(None).init();
-    let args: Args = Args::parse();
+    let args: Args = Args::init();
 
     let mut console = ConsoleMsg::new(args.quiet);
 
     if args.path.is_dir() {
         console.set_spinner("Searching for files...");
 
-        let paths = search_dir(&args.path);
+        let mut paths = search_dir(&args.path);
         let psize = paths.len();
 
         let con = console.finish_spinner(&format!("Found {psize} files."));
@@ -111,8 +75,8 @@ fn main() -> Result<()> {
 
         let start = Instant::now();
 
-        for item in paths {
-            let mut item = item.clone();
+        for item in paths.drain(..) {
+            let mut item = item;
             pool.execute(move || {
                 let enc_start = Instant::now();
                 trace!(
@@ -220,7 +184,7 @@ fn main() -> Result<()> {
             times
         ));
     } else if args.path.is_file() {
-        let mut image = ImageFile::load_from_path(&args.path)?;
+        let mut image = ImageFile::new_from_path(&args.path)?;
 
         console.print_message(format!(
             "Encoding single file {} ({})",

@@ -11,7 +11,7 @@ readme = ""
 
 [dependencies]
 bytesize = "1.2.0"
-clap = { version = "4.2.1", features = ["derive", "cargo"] }
+clap = { version = "4.2.5", features = ["derive", "cargo"] }
 color-eyre = { version = "0.6.2", default_features = false }
 env_logger = { version = "0.10.0", default_features = false, features = [
     "auto-color",
@@ -19,7 +19,6 @@ env_logger = { version = "0.10.0", default_features = false, features = [
 hex = "0.4.3"
 imgref = "1.9.4"
 indicatif = { version = "0.17.3" }
-load_image = { version = "3.0.3", features = ["webp"] }
 log = "0.4.17"
 md5 = { version = "0.7.0", default_features = false }
 num_cpus = "1.15.0"
@@ -31,6 +30,13 @@ sha2 = { version = "0.10.6", features = ["asm"] }
 spinoff = "0.7.0"
 once_cell = "1.17.1"
 threadpool = "1.8.1"
+image = { version = "0.24.6", default-features = false, features = [
+    "rgb",
+    "png",
+    "jpeg",
+    "webp",
+    "bmp",
+] }
 
 [package.metadata.archlinux_pkgbuild]
 arch = ["x86_64", "aarch64"]
