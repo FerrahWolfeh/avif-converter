@@ -28,11 +28,6 @@ pub struct ImageFile {
     pub width: usize,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct ImageOutInfo {
-    pub size: u64,
-}
-
 impl ImageFile {
     pub fn load_from_path(path: &Path) -> Result<Self> {
         if let Some(ext) = path.extension() {
@@ -141,20 +136,8 @@ impl ImageFile {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn full_convert(
-        &mut self,
-        quality: u8,
-        speed: u8,
-        threads: usize,
-        bar: Option<ProgressBar>,
-        name: Name,
-        keep: bool,
-    ) -> Result<ImageOutInfo> {
-        let fdata = self.convert_to_avif_stored(quality, speed, threads, bar)?;
-        self.save_avif(name, keep)?;
-
-        Ok(ImageOutInfo { size: fdata })
+    pub fn original_name(&self) -> String {
+        self.filename.clone()
     }
 
     fn load_rgba_data(data: ImgVecKind) -> Result<ImgVec<RGBA8>> {
