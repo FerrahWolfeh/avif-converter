@@ -1,112 +1,90 @@
 use bytesize::ByteSize;
-use clap::Parser;
+use cli::Args;
 use color_eyre::eyre::Result;
 use image_avif::ImageFile;
-use log::debug;
+use log::{debug, trace};
 use owo_colors::OwoColorize;
 use std::{
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        mpsc, Arc, Mutex,
-    },
-    thread::spawn,
-    time::Instant,
+    sync::atomic::{AtomicU64, Ordering},
+    thread::{self, sleep},
+    time::{Duration, Instant},
 };
+use threadpool::ThreadPool;
 use utils::{search_dir, ConsoleMsg};
 
+mod cli;
 mod image_avif;
 mod name_fun;
-
 mod utils;
 
-use crate::{name_fun::Name, utils::PROGRESS_BAR};
-
-#[derive(Debug, Clone, Parser)]
-struct Args {
-    /// File or directory containing images to convert
-    #[clap(value_name = "PATH")]
-    path: PathBuf,
-
-    #[clap(short, long, default_value_t = 70, value_name = "QUALITY")]
-    quality: u8,
-
-    #[clap(short, long, default_value_t = 4, value_name = "SPEED")]
-    speed: u8,
-
-    #[clap(short, long, value_enum, default_value_t = Name::MD5)]
-    name_type: Name,
-
-    /// Defaults to number of CPU cores. Use 0 for all cores
-    #[clap(short, long, default_value_t = 0, value_name = "THREADS")]
-    threads: usize,
-
-    /// How many images to keep in memory at once
-    #[clap(short, long)]
-    batch_size: Option<usize>,
-
-    /// Supress console messages
-    #[clap(long, default_value_t = false)]
-    quiet: bool,
-
-    /// Keep original file
-    #[clap(short, long, default_value_t = false)]
-    keep: bool,
-}
+use crate::utils::PROGRESS_BAR;
 
 static SUCCESS_COUNT: AtomicU64 = AtomicU64::new(0);
 static FINAL_STATS: AtomicU64 = AtomicU64::new(0);
 static ITEMS_PROCESSED: AtomicU64 = AtomicU64::new(0);
 
+struct ThreadCount {
+    task_threads: usize,
+    spawn_threads: usize,
+}
+
+fn sys_threads(num: usize) -> usize {
+    let sel_thread_count = if num > 0 { num } else { num_cpus::get() };
+
+    assert_ne!(sel_thread_count, 0);
+    sel_thread_count
+}
+
+fn calculate_tread_count(num_threads: usize, num_items: usize) -> ThreadCount {
+    let sel_thread_count = sys_threads(num_threads);
+
+    let job_per_thread = if num_items >= sel_thread_count {
+        1
+    } else {
+        num_items / sel_thread_count
+    };
+
+    ThreadCount {
+        task_threads: job_per_thread,
+        spawn_threads: sel_thread_count,
+    }
+}
+
 fn main() -> Result<()> {
     color_eyre::install()?;
     env_logger::builder().format_timestamp(None).init();
-    let args: Args = Args::parse();
-
-    let thread_num = if args.threads > 0 {
-        args.threads
-    } else {
-        num_cpus::get()
-    };
+    let args: Args = Args::init();
 
     let mut console = ConsoleMsg::new(args.quiet);
 
     if args.path.is_dir() {
         console.set_spinner("Searching for files...");
 
-        let paths = search_dir(&args.path);
+        let mut paths = search_dir(&args.path);
         let psize = paths.len();
 
         let con = console.finish_spinner(&format!("Found {psize} files."));
+
+        let job_num = calculate_tread_count(args.threads, psize);
+
+        let pool = ThreadPool::with_name("Encoder Thread".to_string(), job_num.spawn_threads);
 
         let initial_size: u64 = paths.iter().map(|item| item.size).sum();
 
         con.setup_bar(psize as u64);
 
-        let threads = if paths.len() >= thread_num {
-            1
-        } else {
-            thread_num / paths.len()
-        };
+        let start = Instant::now();
 
-        let (tx, rx) = mpsc::sync_channel(thread_num);
-
-        let rx = Arc::new(Mutex::new(rx));
-
-        let mut handles = Vec::with_capacity(thread_num);
-
-        for _ in 0..thread_num {
-            let rx = rx.clone();
-            let handle = spawn(move || loop {
-                let rx_handle = rx.lock().unwrap();
-
-                let mut item: ImageFile = if let Ok(item) = rx_handle.recv() {
-                    item
-                } else {
-                    break;
-                };
-
-                drop(rx_handle);
+        for item in paths.drain(..) {
+            let mut item = item;
+            pool.execute(move || {
+                let enc_start = Instant::now();
+                trace!(
+                    "{} id: {:?} - Encoding file: {}",
+                    thread::current().name().unwrap_or("Encoder Thread"),
+                    thread::current().id(),
+                    item.original_name()
+                );
 
                 let bar = if args.quiet {
                     None
@@ -114,39 +92,45 @@ fn main() -> Result<()> {
                     Some(PROGRESS_BAR.clone())
                 };
 
-                if let Ok(results) = item.full_convert(
-                    args.quality,
-                    args.speed,
-                    threads,
-                    bar,
-                    args.name_type,
-                    args.keep,
-                ) {
+                if let Ok(r_size) =
+                    item.convert_to_avif_stored(args.quality, args.speed, job_num.task_threads, bar)
+                {
                     SUCCESS_COUNT.fetch_add(1, Ordering::SeqCst);
-                    FINAL_STATS.fetch_add(results.size, Ordering::SeqCst);
+                    FINAL_STATS.fetch_add(r_size, Ordering::SeqCst);
                 }
+
+                if !args.benchmark {
+                    item.save_avif(args.name_type, args.keep).unwrap()
+                }
+
+                trace!(
+                    "{} id: {:?} - Finished encoding: {} | {:?} | {:?}",
+                    thread::current().name().unwrap_or("Encoder Thread"),
+                    thread::current().id(),
+                    item.original_name(),
+                    enc_start.elapsed().bold().cyan(),
+                    start.elapsed().bold().green()
+                );
+
+                drop(item);
 
                 ITEMS_PROCESSED.fetch_add(1, Ordering::SeqCst);
 
-                debug!(
-                    "Items Processed: {}",
-                    ITEMS_PROCESSED.load(Ordering::Relaxed)
-                );
+                if args.quiet {
+                    debug!(
+                        "Items Processed: {}",
+                        ITEMS_PROCESSED.load(Ordering::Relaxed)
+                    );
+                }
             });
-            handles.push(handle);
+            // Debounce in order to start threads safely
+            sleep(Duration::from_millis(100));
         }
 
-        let start = Instant::now();
+        debug!("Total of {} jobs queued", pool.queued_count());
+        debug!("Pool has {} waiting threads", pool.active_count());
 
-        for item in paths {
-            tx.send(item)?;
-        }
-
-        drop(tx);
-
-        for handle in handles {
-            handle.join().unwrap();
-        }
+        pool.join();
 
         let elapsed = start.elapsed();
 
@@ -157,14 +141,14 @@ fn main() -> Result<()> {
             *"New folder size".bold().0,
         ];
 
-        dbg!(FINAL_STATS.load(Ordering::Relaxed));
-        dbg!(initial_size);
+        debug!("Final stats: {}", FINAL_STATS.load(Ordering::Relaxed));
+        debug!("Initial size: {}", initial_size);
 
         let initial_delta = FINAL_STATS.load(Ordering::Relaxed) as f32 / initial_size as f32;
 
         let delta = (initial_delta * 100.) - 100.;
 
-        dbg!(delta);
+        debug!("Delta: {}", delta);
 
         let percentage = if delta < 0. {
             let st1 = format!("{delta:.2}%");
@@ -176,7 +160,7 @@ fn main() -> Result<()> {
 
         let times = {
             let ratio = 1. / initial_delta;
-            dbg!(ratio);
+            debug!("Ratio: {}", ratio);
             if ratio > 0. {
                 let st1 = format!("~{:.1}X smaller", ratio);
                 format!("{}", st1.green())
@@ -200,7 +184,7 @@ fn main() -> Result<()> {
             times
         ));
     } else if args.path.is_file() {
-        let mut image = ImageFile::load_from_path(&args.path)?;
+        let mut image = ImageFile::new_from_path(&args.path)?;
 
         console.print_message(format!(
             "Encoding single file {} ({})",
@@ -210,7 +194,12 @@ fn main() -> Result<()> {
 
         console.set_spinner("Processing...");
 
-        let fsz = image.convert_to_avif_stored(args.quality, args.speed, thread_num, None)?;
+        let fsz = image.convert_to_avif_stored(
+            args.quality,
+            args.speed,
+            sys_threads(args.threads),
+            None,
+        )?;
 
         image.save_avif(args.name_type, args.keep)?;
 

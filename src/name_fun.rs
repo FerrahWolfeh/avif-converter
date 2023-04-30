@@ -17,14 +17,14 @@ impl Name {
     pub fn generate_name(self, data: &ImageFile) -> String {
         match self {
             Name::MD5 => {
-                let digest = md5::compute(&data.avif_data);
+                let digest = md5::compute(&data.encoded_data);
 
                 format!("{digest:x}")
             }
             Name::SHA256 => {
                 let mut hasher = Sha256::new();
 
-                hasher.update(&data.avif_data);
+                hasher.update(&data.encoded_data);
 
                 hex::encode(hasher.finalize())
             }

@@ -1,5 +1,5 @@
 pkgname=avif-converter-git
-pkgver=1.4.1
+pkgver=1.5.0
 pkgrel=1
 source=("git+https://git.solstice-x0.arpa/FerrahWolfeh/avif-converter.git")
 sha256sums=('SKIP')
