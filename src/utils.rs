@@ -89,3 +89,30 @@ pub fn bar_style() -> ProgressStyle {
         })
         .progress_chars("# ")
 }
+
+pub struct ThreadCount {
+    pub task_threads: usize,
+    pub spawn_threads: usize,
+}
+
+pub fn sys_threads(num: usize) -> usize {
+    let sel_thread_count = if num > 0 { num } else { num_cpus::get() };
+
+    assert_ne!(sel_thread_count, 0);
+    sel_thread_count
+}
+
+pub fn calculate_tread_count(num_threads: usize, num_items: usize) -> ThreadCount {
+    let sel_thread_count = sys_threads(num_threads);
+
+    let job_per_thread = if num_items >= sel_thread_count {
+        1
+    } else {
+        num_items / sel_thread_count
+    };
+
+    ThreadCount {
+        task_threads: job_per_thread,
+        spawn_threads: sel_thread_count,
+    }
+}
