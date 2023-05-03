@@ -90,6 +90,7 @@ pub fn bar_style() -> ProgressStyle {
         .progress_chars("# ")
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct ThreadCount {
     pub task_threads: usize,
     pub spawn_threads: usize,
@@ -108,7 +109,7 @@ pub fn calculate_tread_count(num_threads: usize, num_items: usize) -> ThreadCoun
     let job_per_thread = if num_items >= sel_thread_count {
         1
     } else {
-        num_items / sel_thread_count
+        sel_thread_count / num_items
     };
 
     ThreadCount {
