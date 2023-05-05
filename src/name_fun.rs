@@ -2,7 +2,7 @@ use clap::ValueEnum;
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use sha2::{Digest, Sha256};
 
-use crate::image_avif::ImageFile;
+use crate::image_file::ImageFile;
 
 #[derive(Debug, ValueEnum, Copy, Clone)]
 #[repr(u8)]
@@ -29,7 +29,7 @@ impl Name {
                 hex::encode(hasher.finalize())
             }
             Name::Random => Self::random_string(),
-            Name::Same => data.name.clone(),
+            Name::Same => data.metadata.name.clone(),
         }
     }
 

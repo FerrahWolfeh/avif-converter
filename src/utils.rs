@@ -4,7 +4,7 @@ use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
 use spinoff::{spinners, Color, Spinner, Streams};
 
-use crate::image_avif::ImageFile;
+use crate::image_file::ImageFile;
 
 pub static PROGRESS_BAR: Lazy<ProgressBar> =
     Lazy::new(|| ProgressBar::new(0).with_style(bar_style()));

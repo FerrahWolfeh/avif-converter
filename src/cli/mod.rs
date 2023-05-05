@@ -1,4 +1,4 @@
-use crate::image_avif::ImageFile;
+use crate::image_file::ImageFile;
 use crate::search_dir;
 use crate::utils::{calculate_tread_count, sys_threads, PROGRESS_BAR};
 use bytesize::ByteSize;
@@ -91,7 +91,11 @@ impl Args {
 
         let pool = ThreadPool::with_name("Encoder Thread".to_string(), job_num.spawn_threads);
 
-        let initial_size: u64 = paths.iter().map(|item| item.size).sum();
+        let initial_size: u64 = paths.iter().map(|item| item.metadata.size).sum();
+
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(job_num.task_threads)
+            .build_global()?;
 
         con.setup_bar(psize as u64);
 
@@ -214,8 +218,11 @@ impl Args {
 
         console.print_message(format!(
             "Encoding single file {} ({})",
-            image.name.bold(),
-            ByteSize::b(image.size).to_string_as(true).bold().blue()
+            image.metadata.name.bold(),
+            ByteSize::b(image.metadata.size)
+                .to_string_as(true)
+                .bold()
+                .blue()
         ));
 
         console.set_spinner("Processing...");

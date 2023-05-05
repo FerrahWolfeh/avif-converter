@@ -4,7 +4,8 @@ use color_eyre::eyre::Result;
 use utils::{search_dir, ConsoleMsg};
 
 mod cli;
-mod image_avif;
+mod encoders;
+mod image_file;
 mod name_fun;
 mod utils;
 

@@ -1,8 +1,8 @@
+use crate::encoders::avif::encode::Encoder;
 use color_eyre::eyre::{bail, Result};
-use image::{io::Reader, ImageFormat, RgbaImage};
+use image::{io::Reader, DynamicImage, ImageFormat};
 use imgref::Img;
 use indicatif::ProgressBar;
-use ravif::Encoder;
 use rgb::FromSlice;
 use std::{
     fs,
@@ -12,13 +12,20 @@ use std::{
 use crate::name_fun::Name;
 
 #[derive(Debug, Clone)]
-pub struct ImageFile {
+pub struct FileMetadata {
     pub path: PathBuf,
     pub filename: String,
     pub name: String,
     pub extension: String,
     pub size: u64,
-    pub bitmap: RgbaImage,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImageFile {
+    pub metadata: FileMetadata,
+    pub format: ImageFormat,
+    pub has_alpha: bool,
+    pub bitmap: DynamicImage,
     pub encoded_data: Vec<u8>,
     pub height: u32,
     pub width: u32,
@@ -42,29 +49,35 @@ impl ImageFile {
         }
 
         Ok(Self {
-            path: path.to_path_buf(),
-            filename: path.file_name().unwrap().to_string_lossy().to_string(),
-            name: path.file_stem().unwrap().to_string_lossy().to_string(),
-            extension: path.extension().unwrap().to_string_lossy().to_string(),
-            size: path.metadata()?.len(),
-            bitmap: RgbaImage::new(0, 0),
+            metadata: FileMetadata {
+                path: path.to_path_buf(),
+                filename: path.file_name().unwrap().to_string_lossy().to_string(),
+                name: path.file_stem().unwrap().to_string_lossy().to_string(),
+                extension: path.extension().unwrap().to_string_lossy().to_string(),
+                size: path.metadata()?.len(),
+            },
+            bitmap: DynamicImage::new_rgba8(0, 0),
+            has_alpha: false,
             encoded_data: vec![],
             height: 0,
             width: 0,
+            format: ImageFormat::Bmp,
         })
     }
 
     pub fn load_image_data(&mut self) -> Result<()> {
-        let mut image_data = Reader::open(&self.path)?;
+        let mut image_data = Reader::open(&self.metadata.path)?;
 
-        image_data.set_format(ImageFormat::from_extension(&self.extension).unwrap());
+        let format = ImageFormat::from_extension(&self.metadata.extension).unwrap();
+
+        image_data.set_format(format);
 
         let raw_image = image_data.decode()?;
-        let rgb_data = raw_image.to_rgba8();
 
         let (width, height) = (raw_image.width(), raw_image.height());
 
-        self.bitmap = rgb_data;
+        self.bitmap = raw_image;
+        self.format = format;
         self.width = width;
         self.height = height;
 
@@ -78,25 +91,39 @@ impl ImageFile {
         threads: usize,
         progress: Option<ProgressBar>,
     ) -> Result<u64> {
-        if self.bitmap.is_empty() {
+        if self.bitmap.as_bytes().is_empty() {
             self.load_image_data()?;
         }
 
-        assert!(!self.bitmap.is_empty());
+        assert!(!self.bitmap.as_bytes().is_empty());
 
         let encoder = Encoder::new()
-            .with_num_threads(Some(threads))
+            .with_num_threads(threads)
             .with_alpha_quality(100.)
             .with_quality(quality as f32)
             .with_speed(speed);
 
-        let encoded_img = encoder.encode_rgba(Img::new(
-            self.bitmap.as_rgba(),
-            self.width as usize,
-            self.height as usize,
-        ))?;
+        if self.has_alpha {
+            let bmp = self.bitmap.to_rgba8();
 
-        self.encoded_data = encoded_img.avif_file;
+            let encoded_img = encoder.encode_rgba(Img::new(
+                bmp.as_rgba(),
+                self.width as usize,
+                self.height as usize,
+            ))?;
+
+            self.encoded_data = encoded_img.avif_file;
+        } else {
+            let bmp = self.bitmap.to_rgb8();
+
+            let encoded_img = encoder.encode_rgb(Img::new(
+                bmp.as_rgb(),
+                self.width as usize,
+                self.height as usize,
+            ))?;
+
+            self.encoded_data = encoded_img.avif_file;
+        }
 
         if let Some(pb) = progress {
             pb.inc(1);
@@ -108,19 +135,19 @@ impl ImageFile {
     pub fn save_avif(&self, name: Name, keep: bool) -> Result<()> {
         let fname = name.generate_name(self);
 
-        let binding = self.path.canonicalize()?;
+        let binding = self.metadata.path.canonicalize()?;
         let fpath = binding.parent().unwrap();
 
         fs::write(fpath.join(format!("{fname}.avif")), &self.encoded_data)?;
 
         if !keep {
-            fs::remove_file(&self.path)?;
+            fs::remove_file(&self.metadata.path)?;
         }
 
         Ok(())
     }
 
     pub fn original_name(&self) -> String {
-        self.filename.clone()
+        self.metadata.filename.clone()
     }
 }
