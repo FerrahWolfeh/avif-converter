@@ -158,21 +158,11 @@ impl Encoder {
         ))
     }
 
-    #[inline]
     fn check_transparent_pixel(image: &[RGBA<u8>]) -> bool {
         // Isolate only the alpha channel.
         let pixel_alpha = Vec::from_iter(image.iter().map(|pixel| pixel.a));
 
-        pixel_alpha.chunks(32).all(|pixel| {
-            // This is just ugly, but better than having to deal with incomplete chunks and SIMD exploding
-            let mut extra_data = [255; 32];
-            let pxl = if pixel.len() != 32 {
-                extra_data.copy_from_slice(pixel);
-                &extra_data
-            } else {
-                pixel
-            };
-
+        pixel_alpha.chunks_exact(32).all(|pixel| {
             // let cmp = unsafe {
             //     let alpha_reg = _mm256_loadu_si256(pxl.as_ptr() as *const __m256i);
             //     let alpha_mask = _mm256_set1_epi8(-1);
@@ -187,7 +177,7 @@ impl Encoder {
             // cmp.eq(&-1)
 
             // I just cannot comprehend how Rust made this so simple.
-            let alpha_reg = u8x32::from_slice(pxl);
+            let alpha_reg = u8x32::from_slice(pixel);
             let alpha_mask = u8x32::splat(255);
 
             alpha_reg == alpha_mask
