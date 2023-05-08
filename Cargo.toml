@@ -3,7 +3,7 @@ name = "avif-converter"
 description = "Simple tool to batch convert multiple images to AVIF"
 authors = ["Ferrah Aiko <ferrahwolfeh@proton.me>"]
 license = "MIT"
-version = "1.6.0"
+version = "1.6.2"
 edition = "2021"
 readme = ""
 
