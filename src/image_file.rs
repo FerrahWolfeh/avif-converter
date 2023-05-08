@@ -1,9 +1,7 @@
 use crate::encoders::avif::encode::Encoder;
 use color_eyre::eyre::{bail, Result};
 use image::{io::Reader, DynamicImage, ImageFormat};
-use imgref::Img;
 use indicatif::ProgressBar;
-use rgb::FromSlice;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -24,7 +22,6 @@ pub struct FileMetadata {
 pub struct ImageFile {
     pub metadata: FileMetadata,
     pub format: ImageFormat,
-    pub has_alpha: bool,
     pub bitmap: DynamicImage,
     pub encoded_data: Vec<u8>,
     pub height: u32,
@@ -57,7 +54,6 @@ impl ImageFile {
                 size: path.metadata()?.len(),
             },
             bitmap: DynamicImage::new_rgba8(0, 0),
-            has_alpha: false,
             encoded_data: vec![],
             height: 0,
             width: 0,
@@ -103,27 +99,9 @@ impl ImageFile {
             .with_quality(quality as f32)
             .with_speed(speed);
 
-        if self.has_alpha {
-            let bmp = self.bitmap.to_rgba8();
+        let encoded_img = encoder.encode(self)?;
 
-            let encoded_img = encoder.encode_rgba(Img::new(
-                bmp.as_rgba(),
-                self.width as usize,
-                self.height as usize,
-            ))?;
-
-            self.encoded_data = encoded_img.avif_file;
-        } else {
-            let bmp = self.bitmap.to_rgb8();
-
-            let encoded_img = encoder.encode_rgb(Img::new(
-                bmp.as_rgb(),
-                self.width as usize,
-                self.height as usize,
-            ))?;
-
-            self.encoded_data = encoded_img.avif_file;
-        }
+        self.encoded_data = encoded_img.avif_file;
 
         if let Some(pb) = progress {
             pb.inc(1);

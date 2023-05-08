@@ -93,10 +93,6 @@ impl Args {
 
         let initial_size: u64 = paths.iter().map(|item| item.metadata.size).sum();
 
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(job_num.task_threads)
-            .build_global()?;
-
         con.setup_bar(psize as u64);
 
         let start = Instant::now();
