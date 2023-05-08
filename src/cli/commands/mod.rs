@@ -1,9 +1,9 @@
-// use clap::Subcommand;
+use clap::Subcommand;
 
 pub mod avif;
 
-// #[derive(Debug, Subcommand)]
-// pub enum Commands {
-//     Avif,
-//     Convert,
-// }
+#[derive(Debug, Subcommand)]
+pub enum Commands {
+    Avif,
+    Convert,
+}

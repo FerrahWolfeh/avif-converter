@@ -72,6 +72,10 @@ impl ImageFile {
 
         let (width, height) = (raw_image.width(), raw_image.height());
 
+        if width < 32 {
+            bail!("Image width too small for encode!")
+        }
+
         self.bitmap = raw_image;
         self.format = format;
         self.width = width;
