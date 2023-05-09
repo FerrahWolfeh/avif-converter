@@ -85,6 +85,8 @@ impl Args {
         let mut paths = search_dir(&self.path);
         let psize = paths.len();
 
+        paths.sort_by(|a, b| a.metadata.name.cmp(&b.metadata.name));
+
         let con = console.finish_spinner(&format!("Found {psize} files."));
 
         let job_num = calculate_tread_count(self.threads, psize);
@@ -97,8 +99,7 @@ impl Args {
 
         let start = Instant::now();
 
-        for item in paths.drain(..) {
-            let mut item = item;
+        for mut item in paths.drain(..) {
             pool.execute(move || {
                 let enc_start = Instant::now();
                 trace!(

@@ -5,7 +5,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use image::io::Reader;
 use rgb::{FromSlice, RGBA};
 
-const IMAGE: &[u8] = include_bytes!("/mnt/SSHD/AI/Datasets/Izu-Adl/img/35.png");
+const IMAGE: &[u8] = include_bytes!("/mnt/SSHD/AI/Datasets/Izu-Adl/img/10_izu-adl/35.png");
 
 fn check_transparent_pixel(image: &[RGBA<u8>]) -> bool {
     image.iter().any(|pixel| pixel.a != 255)
