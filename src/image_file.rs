@@ -3,7 +3,8 @@ use color_eyre::eyre::{bail, Result};
 use image::{io::Reader, DynamicImage, ImageFormat};
 use indicatif::ProgressBar;
 use std::{
-    fs,
+    fs::{self, OpenOptions},
+    io::{Seek, Write},
     path::{Path, PathBuf},
 };
 
@@ -118,11 +119,22 @@ impl ImageFile {
         let binding = self.metadata.path.canonicalize()?;
         let fpath = binding.parent().unwrap();
 
-        fs::write(fpath.join(format!("{fname}.avif")), &self.encoded_data)?;
+        let avif_name = fpath.join(format!("{fname}.avif"));
 
         if !keep {
-            fs::remove_file(&self.metadata.path)?;
+            let mut orig_file = OpenOptions::new().write(true).open(&binding)?;
+            orig_file.set_len(self.encoded_data.len() as u64)?;
+
+            orig_file.seek(std::io::SeekFrom::Start(0))?;
+
+            orig_file.write_all(&self.encoded_data)?;
+
+            fs::rename(&binding, avif_name)?;
+
+            return Ok(());
         }
+
+        fs::write(avif_name, &self.encoded_data)?;
 
         Ok(())
     }
