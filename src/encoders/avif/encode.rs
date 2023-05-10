@@ -125,7 +125,7 @@ impl Encoder {
         self.encode_raw_planes_8_bit(width, height, planes, Some(alpha), PixelRange::Full)
     }
 
-    pub fn encode(&self, image: &ImageFile) -> Result<EncodedImage> {
+    pub fn encode(&self, image: &mut ImageFile) -> Result<()> {
         if image.bitmap.color().has_alpha() {
             let pix_data = image.bitmap.to_rgba8();
 
@@ -142,7 +142,10 @@ impl Encoder {
                     image.width as usize,
                     image.height as usize,
                 ));
-                return enc;
+
+                image.encoded_data = enc?.avif_file;
+
+                return Ok(());
             }
             trace!("SIMD Eval took {:?}", start.elapsed());
             debug!(
@@ -151,18 +154,25 @@ impl Encoder {
             )
         }
 
-        self.encode_rgb(Img::new(
-            image.bitmap.to_rgb8().as_rgb(),
-            image.width as usize,
-            image.height as usize,
-        ))
+        image.encoded_data = self
+            .encode_rgb(Img::new(
+                image.bitmap.to_rgb8().as_rgb(),
+                image.width as usize,
+                image.height as usize,
+            ))?
+            .avif_file;
+
+        Ok(())
     }
 
     fn check_transparent_pixel(image: &[RGBA<u8>]) -> bool {
         // Isolate only the alpha channel.
         let pixel_alpha = Vec::from_iter(image.iter().map(|pixel| pixel.a));
 
-        pixel_alpha.chunks_exact(32).all(|pixel| {
+        let (_, sd, _) = pixel_alpha.as_simd::<32>();
+        let alpha_mask = u8x32::splat(255);
+
+        sd.iter().all(|pixel| {
             // let cmp = unsafe {
             //     let alpha_reg = _mm256_loadu_si256(pxl.as_ptr() as *const __m256i);
             //     let alpha_mask = _mm256_set1_epi8(-1);
@@ -176,11 +186,7 @@ impl Encoder {
 
             // cmp.eq(&-1)
 
-            // I just cannot comprehend how Rust made this so simple.
-            let alpha_reg = u8x32::from_slice(pixel);
-            let alpha_mask = u8x32::splat(255);
-
-            alpha_reg == alpha_mask
+            pixel == &alpha_mask
         })
     }
 

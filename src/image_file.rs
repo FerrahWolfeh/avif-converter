@@ -103,9 +103,7 @@ impl ImageFile {
             .with_quality(quality as f32)
             .with_speed(speed);
 
-        let encoded_img = encoder.encode(self)?;
-
-        self.encoded_data = encoded_img.avif_file;
+        encoder.encode(self)?;
 
         if let Some(pb) = progress {
             pb.inc(1);
