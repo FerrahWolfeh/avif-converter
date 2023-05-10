@@ -6,8 +6,7 @@ use log::{debug, trace};
 use owo_colors::OwoColorize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::thread::{self, sleep};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use threadpool::ThreadPool;
 
 use clap::Parser;
@@ -53,12 +52,21 @@ pub struct Args {
     #[clap(short, long, default_value_t = false)]
     pub keep: bool,
 
-    /// Enable benchmark mode (will not save any file after encode)
-    #[clap(long, default_value_t = false)]
+    /// Enable benchmark mode
+    #[clap(
+        long,
+        default_value_t = false,
+        conflicts_with = "name_type",
+        conflicts_with = "keep",
+        conflicts_with = "output_file"
+    )]
     pub benchmark: bool,
 
     #[clap(long, default_value_t = false)]
     pub remove_alpha: bool,
+
+    #[clap(short, long, conflicts_with = "name_type", value_name = "OUTPUT")]
+    pub output_file: Option<PathBuf>,
 }
 
 impl Args {
@@ -79,6 +87,10 @@ impl Args {
     }
 
     fn dir_conv(self, console: ConsoleMsg) -> Result<()> {
+        if self.output_file.is_some() {
+            bail!("Cannot assign an output file to a directory")
+        }
+
         let mut console = console;
         console.set_spinner("Searching for files...");
 
@@ -102,12 +114,6 @@ impl Args {
         for mut item in paths.drain(..) {
             pool.execute(move || {
                 let enc_start = Instant::now();
-                trace!(
-                    "{} id: {:?} - Encoding file: {}",
-                    thread::current().name().unwrap_or("Encoder Thread"),
-                    thread::current().id(),
-                    item.original_name()
-                );
 
                 let bar = if self.quiet {
                     None
@@ -123,13 +129,11 @@ impl Args {
                 }
 
                 if !self.benchmark {
-                    item.save_avif(self.name_type, self.keep).unwrap()
+                    item.save_avif(None, self.name_type, self.keep).unwrap()
                 }
 
                 trace!(
-                    "{} id: {:?} - Finished encoding: {} | {:?} | {:?}",
-                    thread::current().name().unwrap_or("Encoder Thread"),
-                    thread::current().id(),
+                    "Finished encoding: {} | {:?} | {:?}",
                     item.original_name(),
                     enc_start.elapsed().bold().cyan(),
                     start.elapsed().bold().green()
@@ -146,12 +150,7 @@ impl Args {
                     );
                 }
             });
-            // Debounce in order to start threads safely
-            sleep(Duration::from_millis(100));
         }
-
-        debug!("Total of {} jobs queued", pool.queued_count());
-        debug!("Pool has {} waiting threads", pool.active_count());
 
         pool.join();
 
@@ -224,6 +223,8 @@ impl Args {
 
         console.set_spinner("Processing...");
 
+        let start = Instant::now();
+
         let fsz = image.convert_to_avif_stored(
             self.quality,
             self.speed,
@@ -232,11 +233,12 @@ impl Args {
         )?;
 
         if !self.benchmark {
-            image.save_avif(self.name_type, self.keep)?;
+            image.save_avif(self.output_file, self.name_type, self.keep)?;
         }
 
         console.finish_spinner(&format!(
-            "Encoding finished ({})",
+            "Encoding finished in {:?} ({})",
+            start.elapsed(),
             ByteSize::b(fsz).to_string_as(true).bold().green()
         ));
 

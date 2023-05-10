@@ -113,13 +113,18 @@ impl ImageFile {
         Ok(self.encoded_data.len() as u64)
     }
 
-    pub fn save_avif(&self, name: Name, keep: bool) -> Result<()> {
+    pub fn save_avif(&self, path: Option<PathBuf>, name: Name, keep: bool) -> Result<()> {
         let fname = name.generate_name(self);
 
         let binding = self.metadata.path.canonicalize()?;
         let fpath = binding.parent().unwrap();
 
         let avif_name = fpath.join(format!("{fname}.avif"));
+
+        if let Some(new_path) = path {
+            fs::write(new_path, &self.encoded_data)?;
+            return Ok(());
+        }
 
         if !keep {
             let mut orig_file = OpenOptions::new().write(true).open(&binding)?;
