@@ -33,6 +33,9 @@ pub struct Args {
     #[clap(short, long, default_value_t = 4, value_name = "SPEED")]
     pub speed: u8,
 
+    #[clap(short = 'd', long, default_value_t = 10)]
+    pub bit_depth: u8,
+
     #[clap(short, long, value_enum, default_value_t = Name::MD5)]
     pub name_type: Name,
 
@@ -121,9 +124,13 @@ impl Args {
                     Some(PROGRESS_BAR.clone())
                 };
 
-                if let Ok(r_size) =
-                    item.convert_to_avif_stored(self.quality, self.speed, job_num.task_threads, bar)
-                {
+                if let Ok(r_size) = item.convert_to_avif_stored(
+                    self.quality,
+                    self.speed,
+                    job_num.task_threads,
+                    self.bit_depth,
+                    bar,
+                ) {
                     SUCCESS_COUNT.fetch_add(1, Ordering::SeqCst);
                     FINAL_STATS.fetch_add(r_size, Ordering::SeqCst);
                 }
@@ -229,6 +236,7 @@ impl Args {
             self.quality,
             self.speed,
             sys_threads(self.threads),
+            self.bit_depth,
             None,
         )?;
 

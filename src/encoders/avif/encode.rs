@@ -35,6 +35,8 @@ pub struct Encoder {
     speed: u8,
     /// How many threads should be used (0 = match core count), None - use global rayon thread pool
     threads: usize,
+    /// Bit-depth of image pixels
+    bit_depth: u8,
 }
 
 /// Builder methods
@@ -47,6 +49,7 @@ impl Encoder {
             alpha_quantizer: quality_to_quantizer(80.),
             speed: 5,
             threads: num_cpus::get(),
+            bit_depth: 10,
         }
     }
 
@@ -90,6 +93,16 @@ impl Encoder {
         self.threads = num_threads;
         self
     }
+
+    /// Pixel bit depth. Panics if using an invalid number
+    #[inline(always)]
+    #[track_caller]
+    #[must_use]
+    pub fn with_bit_depth(mut self, depth: u8) -> Self {
+        assert!([8, 10, 12].contains(&depth));
+        self.bit_depth = depth;
+        self
+    }
 }
 
 /// Once done with config, call one of the `encode_*` functions
@@ -122,7 +135,7 @@ impl Encoder {
         let height = buffer.height();
         let planes = buffer.pixels().map(|px| rgb_to_8_bit_ycbcr(px.rgb()));
         let alpha = buffer.pixels().map(|px| px.a);
-        self.encode_raw_planes_8_bit(width, height, planes, Some(alpha), PixelRange::Full)
+        self.encode_raw_planes(width, height, planes, Some(alpha), PixelRange::Full, 8)
     }
 
     pub fn encode(&self, image: &mut ImageFile) -> Result<()> {
@@ -218,47 +231,14 @@ impl Encoder {
         pixels: impl Iterator<Item = RGB8> + Send + Sync,
     ) -> Result<EncodedImage> {
         let planes = pixels.map(rgb_to_10_bit_ycbcr);
-        self.encode_raw_planes_10_bit(width, height, planes, None::<[_; 0]>, PixelRange::Full)
-    }
-
-    /// Encodes AVIF from 3 planar channels that are in the color space described by `matrix_coefficients`,
-    /// with sRGB transfer characteristics and color primaries.
-    ///
-    /// Alpha always uses full range. Chroma subsampling is not supported, and it's a bad idea for AVIF anyway.
-    /// If there's no alpha, use `None::<[_; 0]>`.
-    ///
-    /// returns AVIF file, size of color metadata, size of alpha metadata overhead
-    #[inline]
-    pub fn encode_raw_planes_8_bit(
-        &self,
-        width: usize,
-        height: usize,
-        planes: impl IntoIterator<Item = [u8; 3]> + Send,
-        alpha: Option<impl IntoIterator<Item = u8> + Send>,
-        color_pixel_range: PixelRange,
-    ) -> Result<EncodedImage> {
-        self.encode_raw_planes(width, height, planes, alpha, color_pixel_range, 8)
-    }
-
-    /// Encodes AVIF from 3 planar channels that are in the color space described by `matrix_coefficients`,
-    /// with sRGB transfer characteristics and color primaries.
-    ///
-    /// The pixels are 10-bit (values `0.=1023`).
-    ///
-    /// Alpha always uses full range. Chroma subsampling is not supported, and it's a bad idea for AVIF anyway.
-    /// If there's no alpha, use `None::<[_; 0]>`.
-    ///
-    /// returns AVIF file, size of color metadata, size of alpha metadata overhead
-    #[inline]
-    pub fn encode_raw_planes_10_bit(
-        &self,
-        width: usize,
-        height: usize,
-        planes: impl IntoIterator<Item = [u16; 3]> + Send,
-        alpha: Option<impl IntoIterator<Item = u16> + Send>,
-        color_pixel_range: PixelRange,
-    ) -> Result<EncodedImage> {
-        self.encode_raw_planes(width, height, planes, alpha, color_pixel_range, 10)
+        self.encode_raw_planes(
+            width,
+            height,
+            planes,
+            None::<[_; 0]>,
+            PixelRange::Full,
+            self.bit_depth,
+        )
     }
 
     #[inline(never)]

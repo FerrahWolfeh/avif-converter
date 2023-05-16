@@ -90,6 +90,7 @@ impl ImageFile {
         quality: u8,
         speed: u8,
         threads: usize,
+        depth: u8,
         progress: Option<ProgressBar>,
     ) -> Result<u64> {
         if self.bitmap.as_bytes().is_empty() {
@@ -102,7 +103,8 @@ impl ImageFile {
             .with_num_threads(threads)
             .with_alpha_quality(100.)
             .with_quality(quality as f32)
-            .with_speed(speed);
+            .with_speed(speed)
+            .with_bit_depth(depth);
 
         encoder.encode(self)?;
 
