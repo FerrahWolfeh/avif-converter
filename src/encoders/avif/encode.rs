@@ -5,7 +5,7 @@ use color_eyre::eyre::Result;
 use imgref::Img;
 use log::{debug, trace};
 use rav1e::prelude::*;
-use rgb::{FromSlice, RGB8, RGBA};
+use rgb::{FromSlice, RGBA};
 
 use crate::image_file::ImageFile;
 
@@ -133,9 +133,22 @@ impl Encoder {
 
         let width = buffer.width();
         let height = buffer.height();
-        let planes = buffer.pixels().map(|px| rgb_to_8_bit_ycbcr(px.rgb()));
-        let alpha = buffer.pixels().map(|px| px.a);
-        self.encode_raw_planes(width, height, planes, Some(alpha), 8)
+
+        match self.bit_depth {
+            8 => {
+                let planes = buffer.pixels().map(|px| rgb_to_8_bit_ycbcr(px.rgb()));
+                let alpha = buffer.pixels().map(|px| px.a);
+                self.encode_raw_planes(width, height, planes, Some(alpha))
+            }
+            10 | 12 => {
+                let planes = buffer
+                    .pixels()
+                    .map(|px| rgb_to_16_bit_ycbcr(px.rgb(), self.bit_depth));
+                let alpha = buffer.pixels().map(|px| px.a as u16);
+                self.encode_raw_planes(width, height, planes, Some(alpha))
+            }
+            _ => unimplemented!(),
+        }
     }
 
     pub fn encode(&self, image: &mut ImageFile) -> Result<()> {
@@ -176,16 +189,32 @@ impl Encoder {
         );
         let bitmap = binding.pixels();
 
-        let planes = bitmap.map(rgb_to_10_bit_ycbcr);
-        image.encoded_data = self
-            .encode_raw_planes(
-                image.width as usize,
-                image.height as usize,
-                planes,
-                None::<[_; 0]>,
-                10,
-            )?
-            .avif_file;
+        match self.bit_depth {
+            8 => {
+                let planes = bitmap.map(rgb_to_8_bit_ycbcr);
+                image.encoded_data = self
+                    .encode_raw_planes(
+                        image.width as usize,
+                        image.height as usize,
+                        planes,
+                        None::<[_; 0]>,
+                    )?
+                    .avif_file;
+            }
+
+            10 | 12 => {
+                let planes = bitmap.map(|px| rgb_to_16_bit_ycbcr(px, self.bit_depth));
+                image.encoded_data = self
+                    .encode_raw_planes(
+                        image.width as usize,
+                        image.height as usize,
+                        planes,
+                        None::<[_; 0]>,
+                    )?
+                    .avif_file;
+            }
+            _ => unimplemented!(),
+        }
 
         Ok(())
     }
@@ -222,7 +251,6 @@ impl Encoder {
         height: usize,
         planes: impl IntoIterator<Item = [P; 3]> + Send,
         alpha: Option<impl IntoIterator<Item = P> + Send>,
-        bit_depth: u8,
     ) -> Result<EncodedImage> {
         let color_description = Some(ColorDescription {
             transfer_characteristics: TransferCharacteristics::SRGB,
@@ -239,11 +267,10 @@ impl Encoder {
             &Av1EncodeConfig {
                 width,
                 height,
-                bit_depth: bit_depth.into(),
+                bit_depth: self.bit_depth.into(),
                 quantizer: self.quantizer.into(),
                 speed: SpeedTweaks::from_my_preset(self.speed, self.quantizer),
                 threads,
-                pixel_range: PixelRange::Full,
                 chroma_sampling: ChromaSampling::Cs444,
                 color_description,
             },
@@ -256,11 +283,10 @@ impl Encoder {
                 &Av1EncodeConfig {
                     width,
                     height,
-                    bit_depth: bit_depth.into(),
+                    bit_depth: self.bit_depth.into(),
                     quantizer: self.alpha_quantizer.into(),
                     speed: SpeedTweaks::from_my_preset(self.speed, self.alpha_quantizer),
                     threads,
-                    pixel_range: PixelRange::Full,
                     chroma_sampling: ChromaSampling::Cs400,
                     color_description: None,
                 },
@@ -278,7 +304,7 @@ impl Encoder {
                 alpha.as_deref(),
                 width as u32,
                 height as u32,
-                bit_depth,
+                self.bit_depth,
             );
         let color_byte_size = color.len();
         let alpha_byte_size = alpha.as_ref().map_or(0, |a| a.len());
@@ -307,8 +333,8 @@ fn rgb_to_ycbcr(px: rgb::RGB<u8>, depth: u8) -> (f32, f32, f32) {
 }
 
 #[inline(always)]
-fn rgb_to_10_bit_ycbcr(px: rgb::RGB<u8>) -> [u16; 3] {
-    let (y, u, v) = rgb_to_ycbcr(px, 10);
+fn rgb_to_16_bit_ycbcr(px: rgb::RGB<u8>, depth: u8) -> [u16; 3] {
+    let (y, u, v) = rgb_to_ycbcr(px, depth);
     [y as u16, u as u16, v as u16]
 }
 
@@ -488,7 +514,6 @@ struct Av1EncodeConfig {
     pub speed: SpeedTweaks,
     /// 0 means num_cpus
     pub threads: usize,
-    pub pixel_range: PixelRange,
     pub chroma_sampling: ChromaSampling,
     pub color_description: Option<ColorDescription>,
 }
@@ -509,7 +534,7 @@ fn rav1e_config(p: &Av1EncodeConfig) -> Config {
         bit_depth: p.bit_depth,
         chroma_sampling: p.chroma_sampling,
         chroma_sample_position: ChromaSamplePosition::Unknown,
-        pixel_range: p.pixel_range,
+        pixel_range: PixelRange::Full,
         color_description: p.color_description,
         mastering_display: None,
         content_light: None,

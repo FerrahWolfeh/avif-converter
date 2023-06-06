@@ -21,6 +21,19 @@ static SUCCESS_COUNT: AtomicU64 = AtomicU64::new(0);
 static FINAL_STATS: AtomicU64 = AtomicU64::new(0);
 static ITEMS_PROCESSED: AtomicU64 = AtomicU64::new(0);
 
+fn bit_values(s: &str) -> Result<u8, String> {
+    const DEPTHS: [u8; 3] = [8, 10, 12];
+    let depth: u8 = s
+        .parse()
+        .map_err(|_| format!("`{s}` isn't a valid number"))?;
+
+    if DEPTHS.contains(&depth) {
+        Ok(depth)
+    } else {
+        Err("bit depth must be either 8, 10 or 12".to_string())
+    }
+}
+
 #[derive(Debug, Clone, Parser)]
 pub struct Args {
     /// File or directory containing images to convert
@@ -36,7 +49,8 @@ pub struct Args {
     #[clap(short, long, value_enum, default_value_t = Name::MD5)]
     pub name_type: Name,
 
-    #[clap(short = 'd', long, default_value_t = 10, value_parser(clap::value_parser!(u8).range(8..=10)))]
+    /// Encoded image bit depth.
+    #[clap(short = 'd', long, default_value_t = 10, value_parser(bit_values))]
     pub bit_depth: u8,
 
     /// Defaults to number of CPU cores. Use 0 for all cores
