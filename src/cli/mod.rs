@@ -33,11 +33,11 @@ pub struct Args {
     #[clap(short, long, default_value_t = 4, value_name = "SPEED")]
     pub speed: u8,
 
-    #[clap(short = 'd', long, default_value_t = 10)]
-    pub bit_depth: u8,
-
     #[clap(short, long, value_enum, default_value_t = Name::MD5)]
     pub name_type: Name,
+
+    #[clap(short = 'd', long, default_value_t = 10, value_parser(clap::value_parser!(u8).range(8..=10)))]
+    pub bit_depth: u8,
 
     /// Defaults to number of CPU cores. Use 0 for all cores
     #[clap(short, long, default_value_t = 0, value_name = "THREADS")]

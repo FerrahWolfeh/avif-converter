@@ -135,7 +135,7 @@ impl Encoder {
         let height = buffer.height();
         let planes = buffer.pixels().map(|px| rgb_to_8_bit_ycbcr(px.rgb()));
         let alpha = buffer.pixels().map(|px| px.a);
-        self.encode_raw_planes(width, height, planes, Some(alpha), PixelRange::Full, 8)
+        self.encode_raw_planes(width, height, planes, Some(alpha), 8)
     }
 
     pub fn encode(&self, image: &mut ImageFile) -> Result<()> {
@@ -167,12 +167,24 @@ impl Encoder {
             )
         }
 
+        let raw_map = image.bitmap.to_rgb8();
+
+        let binding = Img::new(
+            raw_map.as_rgb(),
+            image.width as usize,
+            image.height as usize,
+        );
+        let bitmap = binding.pixels();
+
+        let planes = bitmap.map(rgb_to_10_bit_ycbcr);
         image.encoded_data = self
-            .encode_rgb(Img::new(
-                image.bitmap.to_rgb8().as_rgb(),
+            .encode_raw_planes(
                 image.width as usize,
                 image.height as usize,
-            ))?
+                planes,
+                None::<[_; 0]>,
+                10,
+            )?
             .avif_file;
 
         Ok(())
@@ -203,44 +215,6 @@ impl Encoder {
         })
     }
 
-    /// Make a new AVIF image from RGB pixels
-    ///
-    /// Make the `Img` for the `buffer` like this:
-    ///
-    /// ```rust,ignore
-    /// Img::new(&pixels_rgb[..], width, height)
-    /// ```
-    ///
-    /// If you have pixels as `u8` slice, then first do:
-    ///
-    /// ```rust,ignore
-    /// use rgb::ComponentSlice;
-    /// let pixels_rgb = pixels_u8.as_rgb();
-    /// ```
-    ///
-    /// returns AVIF file, size of color metadata
-    #[inline]
-    fn encode_rgb(&self, buffer: Img<&[RGB8]>) -> Result<EncodedImage> {
-        self.encode_rgb_internal(buffer.width(), buffer.height(), buffer.pixels())
-    }
-
-    fn encode_rgb_internal(
-        &self,
-        width: usize,
-        height: usize,
-        pixels: impl Iterator<Item = RGB8> + Send + Sync,
-    ) -> Result<EncodedImage> {
-        let planes = pixels.map(rgb_to_10_bit_ycbcr);
-        self.encode_raw_planes(
-            width,
-            height,
-            planes,
-            None::<[_; 0]>,
-            PixelRange::Full,
-            self.bit_depth,
-        )
-    }
-
     #[inline(never)]
     fn encode_raw_planes<P: rav1e::Pixel + Default>(
         &self,
@@ -248,7 +222,6 @@ impl Encoder {
         height: usize,
         planes: impl IntoIterator<Item = [P; 3]> + Send,
         alpha: Option<impl IntoIterator<Item = P> + Send>,
-        color_pixel_range: PixelRange,
         bit_depth: u8,
     ) -> Result<EncodedImage> {
         let color_description = Some(ColorDescription {
@@ -270,7 +243,7 @@ impl Encoder {
                 quantizer: self.quantizer.into(),
                 speed: SpeedTweaks::from_my_preset(self.speed, self.quantizer),
                 threads,
-                pixel_range: color_pixel_range,
+                pixel_range: PixelRange::Full,
                 chroma_sampling: ChromaSampling::Cs444,
                 color_description,
             },
