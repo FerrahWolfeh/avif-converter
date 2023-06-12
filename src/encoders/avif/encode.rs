@@ -318,7 +318,7 @@ impl Encoder {
 }
 
 #[inline(always)]
-fn rgb_to_ycbcr(px: rgb::RGB<u8>, depth: u8) -> (f32, f32, f32) {
+fn rgb_to_ycbcr(px: rgb::RGB<u8>, depth: u8) -> (u16, u16, u16) {
     let matrix = [0.2990, 0.5870, 0.1140]; // BT601
 
     let max_value = ((1 << depth) - 1) as f32;
@@ -329,13 +329,13 @@ fn rgb_to_ycbcr(px: rgb::RGB<u8>, depth: u8) -> (f32, f32, f32) {
         + scale * matrix[2] * f32::from(px.b);
     let cb = (f32::from(px.b) * scale - y).mul_add(0.5 / (1. - matrix[2]), shift);
     let cr = (f32::from(px.r) * scale - y).mul_add(0.5 / (1. - matrix[0]), shift);
-    (y.round(), cb.round(), cr.round())
+    (y.round() as u16, cb.round() as u16, cr.round() as u16)
 }
 
 #[inline(always)]
 fn rgb_to_16_bit_ycbcr(px: rgb::RGB<u8>, depth: u8) -> [u16; 3] {
     let (y, u, v) = rgb_to_ycbcr(px, depth);
-    [y as u16, u as u16, v as u16]
+    [y, u, v]
 }
 
 #[inline(always)]
