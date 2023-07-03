@@ -144,7 +144,9 @@ impl Encoder {
                 let planes = buffer
                     .pixels()
                     .map(|px| rgb_to_16_bit_ycbcr(px.rgb(), self.bit_depth));
-                let alpha = buffer.pixels().map(|px| px.a as u16);
+                let alpha = buffer
+                    .pixels()
+                    .map(|px| bitshift_16_bit(px.a, self.bit_depth));
                 self.encode_raw_planes(width, height, planes, Some(alpha))
             }
             _ => unimplemented!(),
@@ -354,6 +356,13 @@ fn quality_to_quantizer(quality: f32) -> u8 {
         1. - q
     };
     (x * 255.).round() as u8
+}
+
+fn bitshift_16_bit(x: u8, mag: u8) -> u16 {
+    let lhs = if mag == 10 { 2 } else { 4 };
+    let rhs = if mag == 10 { 6 } else { 12 };
+
+    ((x as u16) << lhs) | ((x as u16) >> rhs)
 }
 
 #[derive(Debug, Copy, Clone)]

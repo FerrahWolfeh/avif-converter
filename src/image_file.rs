@@ -101,7 +101,7 @@ impl ImageFile {
 
         let encoder = Encoder::new()
             .with_num_threads(threads)
-            .with_alpha_quality(100.)
+            .with_alpha_quality(quality as f32)
             .with_quality(quality as f32)
             .with_speed(speed)
             .with_bit_depth(depth);
