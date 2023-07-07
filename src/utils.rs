@@ -1,8 +1,9 @@
 use std::{fmt::Write, fs, path::Path, time::Duration};
 
 use color_eyre::Result;
+use image::DynamicImage;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
-use notify_rust::Notification;
+use notify_rust::{Image, Notification};
 use once_cell::sync::Lazy;
 use spinoff::{spinners, Color, Spinner, Streams};
 
@@ -78,13 +79,19 @@ impl ConsoleMsg {
         Ok(())
     }
 
-    pub fn notify_image(&self, message: &str, image_path: &Path) -> Result<()> {
+    pub fn notify_image(&self, message: &str, image: &DynamicImage) -> Result<()> {
+        let img = image.resize(512, 512, image::imageops::FilterType::Nearest);
+
         if self.notify {
             Notification::new()
                 .appname("AVIF Converter")
                 .summary("Conversion Completed")
                 .body(message)
-                .image_path(image_path.as_os_str().to_str().unwrap())
+                .image_data(Image::from_rgba(
+                    img.width() as i32,
+                    img.height() as i32,
+                    img.to_rgba8().into_vec(),
+                )?)
                 .show()?;
         }
 

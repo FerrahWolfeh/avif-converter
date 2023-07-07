@@ -267,23 +267,25 @@ impl Args {
         )?;
 
         if !self.benchmark {
-            let outp = image.save_avif(self.output_file, self.name_type, self.keep)?;
-            console.notify_image(
-                &format!(
-                    "Finished in {:.2?} \n {} → {}",
-                    start.elapsed(),
-                    ByteSize::b(image.metadata.size).to_string_as(true),
-                    ByteSize::b(fsz).to_string_as(true)
-                ),
-                &outp,
-            )?;
+            image.save_avif(self.output_file, self.name_type, self.keep)?;
         }
+
+        console.notify_image(
+            &format!(
+                "Finished in {:.2?} \n {} → {}",
+                start.elapsed(),
+                ByteSize::b(image.metadata.size).to_string_as(true),
+                ByteSize::b(fsz).to_string_as(true)
+            ),
+            &image.bitmap,
+        )?;
 
         console.finish_spinner(&format!(
             "Encoding finished in {:?} ({})",
             start.elapsed(),
             ByteSize::b(fsz).to_string_as(true).bold().green()
         ));
+
         Ok(())
     }
 }

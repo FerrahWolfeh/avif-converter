@@ -115,7 +115,7 @@ impl ImageFile {
         Ok(self.encoded_data.len() as u64)
     }
 
-    pub fn save_avif(&self, path: Option<PathBuf>, name: Name, keep: bool) -> Result<PathBuf> {
+    pub fn save_avif(&self, path: Option<PathBuf>, name: Name, keep: bool) -> Result<()> {
         let fname = name.generate_name(self);
 
         let binding = self.metadata.path.canonicalize()?;
@@ -125,7 +125,7 @@ impl ImageFile {
 
         if let Some(new_path) = path {
             fs::write(new_path, &self.encoded_data)?;
-            return Ok(avif_name);
+            return Ok(());
         }
 
         if !keep {
@@ -138,12 +138,12 @@ impl ImageFile {
 
             fs::rename(&binding, &avif_name)?;
 
-            return Ok(avif_name);
+            return Ok(());
         }
 
         fs::write(&avif_name, &self.encoded_data)?;
 
-        Ok(avif_name)
+        Ok(())
     }
 
     pub fn original_name(&self) -> String {
