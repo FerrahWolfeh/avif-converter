@@ -11,8 +11,8 @@ use threadpool::ThreadPool;
 
 use clap::Parser;
 
+use crate::console::ConsoleMsg;
 use crate::name_fun::Name;
-use crate::ConsoleMsg;
 use color_eyre::eyre::{bail, Result};
 
 mod commands;
@@ -97,14 +97,23 @@ impl Args {
 
     pub fn run_conv(self) -> Result<()> {
         let console = ConsoleMsg::new(self.quiet, self.notify);
+        let error_con = ConsoleMsg::new(self.quiet, self.notify);
 
-        if self.path.is_dir() {
-            self.dir_conv(console)
-        } else if self.path.is_file() {
-            self.single_file_conv(console)
-        } else {
-            bail!("Unsupported operation")
+        let u = {
+            if self.path.is_dir() {
+                self.dir_conv(console)
+            } else if self.path.is_file() {
+                self.single_file_conv(console)
+            } else {
+                bail!("Unsupported operation")
+            }
+        };
+
+        if let Err(error) = u {
+            error_con.notify_error(&error.to_string())?;
         }
+
+        Ok(())
     }
 
     fn dir_conv(self, console: ConsoleMsg) -> Result<()> {
@@ -244,6 +253,7 @@ impl Args {
     fn single_file_conv(self, console: ConsoleMsg) -> Result<()> {
         let mut console = console;
         let mut image = ImageFile::new_from_path(&self.path)?;
+        let image_size = image.metadata.size;
 
         console.print_message(format!(
             "Encoding single file {} ({})",
@@ -270,14 +280,18 @@ impl Args {
             image.save_avif(self.output_file, self.name_type, self.keep)?;
         }
 
+        let bmp = image.bitmap.clone();
+
+        drop(image);
+
         console.notify_image(
             &format!(
                 "Finished in {:.2?} \n {} → {}",
                 start.elapsed(),
-                ByteSize::b(image.metadata.size).to_string_as(true),
+                ByteSize::b(image_size).to_string_as(true),
                 ByteSize::b(fsz).to_string_as(true)
             ),
-            &image.bitmap,
+            bmp,
         )?;
 
         console.finish_spinner(&format!(

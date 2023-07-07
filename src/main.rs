@@ -2,9 +2,10 @@
 use cli::Args;
 use color_eyre::eyre::Result;
 
-use utils::{search_dir, ConsoleMsg};
+use utils::search_dir;
 
 mod cli;
+mod console;
 mod encoders;
 mod image_file;
 mod name_fun;
