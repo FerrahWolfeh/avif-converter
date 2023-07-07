@@ -84,6 +84,10 @@ pub struct Args {
 
     #[clap(short, long, conflicts_with = "name_type", value_name = "OUTPUT")]
     pub output_file: Option<PathBuf>,
+
+    /// Send a notification to the desktop when all jobs are finished
+    #[clap(short = 'N', long, default_value_t = false)]
+    pub notify: bool,
 }
 
 impl Args {
@@ -92,7 +96,7 @@ impl Args {
     }
 
     pub fn run_conv(self) -> Result<()> {
-        let console = ConsoleMsg::new(self.quiet);
+        let console = ConsoleMsg::new(self.quiet, self.notify);
 
         if self.path.is_dir() {
             self.dir_conv(console)
@@ -150,7 +154,7 @@ impl Args {
                 }
 
                 if !self.benchmark {
-                    item.save_avif(None, self.name_type, self.keep).unwrap()
+                    item.save_avif(None, self.name_type, self.keep).unwrap();
                 }
 
                 trace!(
@@ -226,6 +230,14 @@ impl Args {
             percentage,
             times
         ));
+
+        con.notify_text(&format!(
+            "Encoded {} files in {elapsed:.2?}\n{} → {}",
+            SUCCESS_COUNT.load(Ordering::SeqCst),
+            ByteSize::b(initial_size).to_string_as(true),
+            ByteSize::b(FINAL_STATS.load(Ordering::SeqCst)).to_string_as(true)
+        ))?;
+
         Ok(())
     }
 
@@ -255,7 +267,16 @@ impl Args {
         )?;
 
         if !self.benchmark {
-            image.save_avif(self.output_file, self.name_type, self.keep)?;
+            let outp = image.save_avif(self.output_file, self.name_type, self.keep)?;
+            console.notify_image(
+                &format!(
+                    "Finished in {:.2?} \n {} → {}",
+                    start.elapsed(),
+                    ByteSize::b(image.metadata.size).to_string_as(true),
+                    ByteSize::b(fsz).to_string_as(true)
+                ),
+                &outp,
+            )?;
         }
 
         console.finish_spinner(&format!(
@@ -263,7 +284,6 @@ impl Args {
             start.elapsed(),
             ByteSize::b(fsz).to_string_as(true).bold().green()
         ));
-
         Ok(())
     }
 }

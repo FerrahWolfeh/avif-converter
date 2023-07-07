@@ -1,6 +1,8 @@
 use std::{fmt::Write, fs, path::Path, time::Duration};
 
+use color_eyre::Result;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use notify_rust::Notification;
 use once_cell::sync::Lazy;
 use spinoff::{spinners, Color, Spinner, Streams};
 
@@ -12,14 +14,16 @@ pub static PROGRESS_BAR: Lazy<ProgressBar> =
 pub struct ConsoleMsg {
     spinner: Option<Spinner>,
     quiet: bool,
+    notify: bool,
 }
 
 impl ConsoleMsg {
     #[must_use]
-    pub fn new(quiet: bool) -> Self {
+    pub fn new(quiet: bool, notify: bool) -> Self {
         Self {
             spinner: None,
             quiet,
+            notify,
         }
     }
 
@@ -59,6 +63,32 @@ impl ConsoleMsg {
         if !self.quiet {
             PROGRESS_BAR.finish_and_clear();
         }
+    }
+
+    pub fn notify_text(&self, message: &str) -> Result<()> {
+        if self.notify {
+            Notification::new()
+                .appname("AVIF Converter")
+                .summary("Conversion completed")
+                .body(message)
+                .icon("folder")
+                .show()?;
+        }
+
+        Ok(())
+    }
+
+    pub fn notify_image(&self, message: &str, image_path: &Path) -> Result<()> {
+        if self.notify {
+            Notification::new()
+                .appname("AVIF Converter")
+                .summary("Conversion Completed")
+                .body(message)
+                .image_path(image_path.as_os_str().to_str().unwrap())
+                .show()?;
+        }
+
+        Ok(())
     }
 }
 
