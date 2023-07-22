@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=inode/directory
+Actions=avif-custom;avif-preserve;avif-name
+X-KDE-Submenu=AVIF
+
+[Desktop Action avif-custom]
+Name=AVIF
+Icon=image
+Exec=File=%u ; avif-converter -N --quiet -q 80 -s 2 "$File"
+
+[Desktop Action avif-preserve]
+Name=AVIF (keep old files)
+Icon=image
+Exec=File=%u ; avif-converter -N --quiet -q 80 -s 2 -k "$File"
+
+[Desktop Action avif-name]
+Name=AVIF (keep names)
+Icon=image
+Exec=File=%u ; avif-converter -N --quiet -q 80 -s 2 -n same "$File"

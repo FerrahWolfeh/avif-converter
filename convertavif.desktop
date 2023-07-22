@@ -1,0 +1,23 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=KonqPopupMenu/Plugin
+MimeType=image/*
+Actions=png;heif;jpg;bmp
+X-KDE-Submenu=Convert to
+X-KDE-Submenu[pt_BR]=Converter para
+
+[Desktop Action png]
+Name=PNG
+Exec=File=%u ; convert "$File" "${File%.*}.png" && rm "$File"
+
+[Desktop Action heif]
+Name=HEIF
+Exec=File=%u ; heif-enc "$File" -o "${File%.*}.heif" && rm "$File"
+
+[Desktop Action jpg]
+Name=JPG
+Exec=File=%u ; convert "$File" "${File%.*}.jpg" && rm "$File"
+
+[Desktop Action bmp]
+Name=BMP
+Exec=File=%u ; convert "$File" "${File%.*}.bmp" && rm "$File"
