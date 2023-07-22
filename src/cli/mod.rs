@@ -2,14 +2,15 @@ use crate::image_file::ImageFile;
 use crate::search_dir;
 use crate::utils::{calculate_tread_count, sys_threads, PROGRESS_BAR};
 use bytesize::ByteSize;
-use log::{debug, trace};
+use log::{debug, error, trace};
 use owo_colors::OwoColorize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
+use thread_priority::{set_current_thread_priority, ThreadPriority};
 use threadpool::ThreadPool;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
 use crate::console::ConsoleMsg;
 use crate::name_fun::Name;
@@ -88,11 +89,39 @@ pub struct Args {
     /// Send a notification to the desktop when all jobs are finished
     #[clap(short = 'N', long, default_value_t = false)]
     pub notify: bool,
+
+    /// Set encoder threads priority
+    #[clap(short, long, value_enum, default_value_t = ThreadNice::Default)]
+    pub priority: ThreadNice,
+}
+
+#[derive(Debug, Copy, Clone, ValueEnum, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ThreadNice {
+    Max,
+    Min,
+    Default,
 }
 
 impl Args {
     pub fn init() -> Self {
         Self::parse()
+    }
+
+    fn set_encoder_priority(thread_level: ThreadNice) {
+        let thread_response = match thread_level {
+            ThreadNice::Max => ThreadPriority::Max,
+            ThreadNice::Min | ThreadNice::Default => ThreadPriority::Min,
+        };
+
+        if thread_level == ThreadNice::Default {
+            return;
+        };
+
+        if set_current_thread_priority(thread_response).is_ok() {
+            debug!("Thread priority set to {:?}", thread_response);
+        } else {
+            error!("Failed to set thread priority. Leaving as default")
+        }
     }
 
     pub fn run_conv(self) -> Result<()> {
@@ -143,6 +172,7 @@ impl Args {
 
         for mut item in paths.drain(..) {
             pool.execute(move || {
+                Self::set_encoder_priority(self.priority);
                 let enc_start = Instant::now();
 
                 let bar = if self.quiet {
