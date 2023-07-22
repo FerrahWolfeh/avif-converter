@@ -7,7 +7,7 @@ use owo_colors::OwoColorize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
-use thread_priority::{set_current_thread_priority, ThreadPriority};
+use thread_priority::{set_current_thread_priority, ThreadPriority, ThreadPriorityValue};
 use threadpool::ThreadPool;
 
 use clap::{Parser, ValueEnum};
@@ -96,10 +96,11 @@ pub struct Args {
 }
 
 #[derive(Debug, Copy, Clone, ValueEnum, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
 pub enum ThreadNice {
-    Max,
-    Min,
-    Default,
+    Max = 0,
+    Min = 99,
+    Default = 55,
 }
 
 impl Args {
@@ -108,16 +109,9 @@ impl Args {
     }
 
     fn set_encoder_priority(thread_level: ThreadNice) {
-        let thread_response = match thread_level {
-            ThreadNice::Max => ThreadPriority::Max,
-            ThreadNice::Min | ThreadNice::Default => ThreadPriority::Min,
-        };
+        let thread_response = ThreadPriorityValue::try_from(thread_level as u8).unwrap();
 
-        if thread_level == ThreadNice::Default {
-            return;
-        };
-
-        if set_current_thread_priority(thread_response).is_ok() {
+        if set_current_thread_priority(ThreadPriority::Crossplatform(thread_response)).is_ok() {
             debug!("Thread priority set to {:?}", thread_response);
         } else {
             error!("Failed to set thread priority. Leaving as default")
