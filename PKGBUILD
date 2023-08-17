@@ -1,7 +1,7 @@
 pkgname=avif-converter-git
 pkgver=1.9.1
 pkgrel=1
-source=("git+https://git.solstice-x0.arpa/FerrahWolfeh/avif-converter.git")
+source=("git+https://github.com/FerrahWolfeh/avif-converter.git")
 sha256sums=('SKIP')
 pkgdesc='Custom avif image converter made with Rust'
 arch=('i686' 'x86_64' 'armv7h' 'aarch64')
