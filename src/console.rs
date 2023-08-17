@@ -33,7 +33,7 @@ impl ConsoleMsg {
     }
 
     pub fn finish_spinner(mut self, message: &str) -> Self {
-        if let Some(spin) = self.spinner {
+        if let Some(mut spin) = self.spinner {
             spin.success(message);
             self.spinner = None
         }

@@ -1,9 +1,14 @@
 use clap::Subcommand;
 
-pub mod avif;
+use self::{avif::Avif, watch::Watch};
 
-#[derive(Debug, Subcommand)]
+pub mod avif;
+pub mod watch;
+
+#[derive(Debug, Subcommand, Clone)]
 pub enum Commands {
-    Avif,
-    Convert,
+    /// Convert images to AVIF format
+    Avif(Avif),
+    /// Watch directory for new image files and convert them
+    Watch(Watch),
 }
