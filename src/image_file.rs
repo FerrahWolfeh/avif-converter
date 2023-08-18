@@ -91,6 +91,7 @@ impl ImageFile {
         speed: u8,
         threads: usize,
         depth: u8,
+        remove_alpha: bool,
         progress: Option<ProgressBar>,
     ) -> Result<u64> {
         if self.bitmap.as_bytes().is_empty() {
@@ -106,7 +107,7 @@ impl ImageFile {
             .with_speed(speed)
             .with_bit_depth(depth);
 
-        encoder.encode(self)?;
+        encoder.encode(self, remove_alpha)?;
 
         if let Some(pb) = progress {
             pb.inc(1);

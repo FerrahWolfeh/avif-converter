@@ -105,6 +105,7 @@ impl Avif {
                     globals.speed,
                     job_num.task_threads,
                     globals.bit_depth,
+                    globals.remove_alpha,
                     bar,
                 ) {
                     SUCCESS_COUNT.fetch_add(1, Ordering::SeqCst);
@@ -223,6 +224,7 @@ impl Avif {
             globals.speed,
             sys_threads(globals.threads),
             globals.bit_depth,
+            globals.remove_alpha,
             None,
         )?;
 

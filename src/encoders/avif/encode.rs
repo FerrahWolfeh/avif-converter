@@ -4,7 +4,7 @@ use color_eyre::eyre::Result;
 use imgref::Img;
 use log::{debug, trace};
 use rav1e::prelude::*;
-use rgb::{FromSlice, RGBA};
+use rgb::{FromSlice, RGB, RGBA};
 
 use crate::image_file::ImageFile;
 
@@ -152,7 +152,26 @@ impl Encoder {
         }
     }
 
-    pub fn encode(&self, image: &mut ImageFile) -> Result<()> {
+    fn encode_rgb(&self, in_buffer: Img<&[RGB<u8>]>) -> Result<EncodedImage> {
+        let bitmap = in_buffer.pixels();
+        let width = in_buffer.width();
+        let height = in_buffer.height();
+
+        match self.bit_depth {
+            8 => {
+                let planes = bitmap.map(rgb_to_8_bit_ycbcr);
+                self.encode_raw_planes(width, height, planes, None::<[_; 0]>)
+            }
+
+            10 | 12 => {
+                let planes = bitmap.map(|px| rgb_to_16_bit_ycbcr(px, self.bit_depth));
+                self.encode_raw_planes(width, height, planes, None::<[_; 0]>)
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn encode(&self, image: &mut ImageFile, remove_alpha: bool) -> Result<()> {
         if image.bitmap.color().has_alpha() {
             let pix_data = image.bitmap.to_rgba8();
 
@@ -163,6 +182,31 @@ impl Encoder {
                     "Image {} has transparency, encoding fully.",
                     image.original_name()
                 );
+
+                if remove_alpha {
+                    debug!("Replacing transparent pixels with black");
+                    let mut imgmg = image.bitmap.to_rgba8();
+                    imgmg.pixels_mut().for_each(|px| {
+                        if px.0[3] != 255 {
+                            px.0[3] = 255;
+                            px.0[2] = 0;
+                            px.0[1] = 0;
+                            px.0[0] = 0;
+                        }
+                    });
+
+                    let editable_img = imgmg.as_rgba();
+
+                    let binding = Img::new(
+                        editable_img,
+                        imgmg.width() as usize,
+                        imgmg.height() as usize,
+                    );
+
+                    image.encoded_data = self.encode_rgba(binding)?.avif_file;
+
+                    return Ok(());
+                }
 
                 let enc = self.encode_rgba(Img::new(
                     image.bitmap.to_rgba8().as_rgba(),
@@ -188,34 +232,8 @@ impl Encoder {
             image.width as usize,
             image.height as usize,
         );
-        let bitmap = binding.pixels();
 
-        match self.bit_depth {
-            8 => {
-                let planes = bitmap.map(rgb_to_8_bit_ycbcr);
-                image.encoded_data = self
-                    .encode_raw_planes(
-                        image.width as usize,
-                        image.height as usize,
-                        planes,
-                        None::<[_; 0]>,
-                    )?
-                    .avif_file;
-            }
-
-            10 | 12 => {
-                let planes = bitmap.map(|px| rgb_to_16_bit_ycbcr(px, self.bit_depth));
-                image.encoded_data = self
-                    .encode_raw_planes(
-                        image.width as usize,
-                        image.height as usize,
-                        planes,
-                        None::<[_; 0]>,
-                    )?
-                    .avif_file;
-            }
-            _ => unimplemented!(),
-        }
+        image.encoded_data = self.encode_rgb(binding)?.avif_file;
 
         Ok(())
     }

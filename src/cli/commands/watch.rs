@@ -8,7 +8,11 @@ use std::{
 };
 use threadpool::ThreadPool;
 
-use crate::{cli::Args as Globals, image_file::ImageFile, utils::{sys_threads, truncate_str}};
+use crate::{
+    cli::Args as Globals,
+    image_file::ImageFile,
+    utils::{sys_threads, truncate_str},
+};
 use clap::Args;
 
 #[derive(Args, Debug, Clone)]
@@ -76,6 +80,7 @@ impl Watch {
             globals.speed,
             1,
             globals.bit_depth,
+            globals.remove_alpha,
             None,
         )?;
 
