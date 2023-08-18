@@ -1,5 +1,5 @@
 pkgname=avif-converter-git
-pkgver=1.9.1
+pkgver=1.10.1
 pkgrel=1
 source=("git+https://github.com/FerrahWolfeh/avif-converter.git")
 sha256sums=('SKIP')

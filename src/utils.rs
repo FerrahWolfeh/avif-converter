@@ -63,3 +63,15 @@ pub fn calculate_tread_count(num_threads: usize, num_items: usize) -> ThreadCoun
         spawn_threads: sel_thread_count,
     }
 }
+
+pub fn truncate_str(str: &str, size: usize) -> String {
+    assert!(str.len() > 3);
+
+    if str.len() <= size {
+        return str.to_string()
+    }
+
+    let mut truncated = str[..size].to_string();
+    truncated.push_str("...");
+    truncated
+}

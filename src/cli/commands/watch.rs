@@ -8,7 +8,7 @@ use std::{
 };
 use threadpool::ThreadPool;
 
-use crate::{cli::Args as Globals, image_file::ImageFile, utils::sys_threads};
+use crate::{cli::Args as Globals, image_file::ImageFile, utils::{sys_threads, truncate_str}};
 use clap::Args;
 
 #[derive(Args, Debug, Clone)]
@@ -82,8 +82,8 @@ impl Watch {
         image.save_avif(None, globals.name_type, globals.keep)?;
 
         info!(
-            "File '{:.32}' encode finished. {} -> {} ({:?})",
-            image.metadata.filename,
+            "File '{}' encode finished. {} -> {} ({:?})",
+            truncate_str(&image.metadata.filename, 32),
             ByteSize::b(image_size).to_string_as(true),
             ByteSize::b(fsz).to_string_as(true),
             start.elapsed()
