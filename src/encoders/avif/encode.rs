@@ -1,4 +1,3 @@
-use std::simd::u8x32;
 use std::time::Instant;
 
 use color_eyre::eyre::Result;
@@ -225,25 +224,7 @@ impl Encoder {
         // Isolate only the alpha channel.
         let pixel_alpha = Vec::from_iter(image.iter().map(|pixel| pixel.a));
 
-        let (_, sd, _) = pixel_alpha.as_simd::<32>();
-        let alpha_mask = u8x32::splat(255);
-
-        sd.iter().all(|pixel| {
-            // let cmp = unsafe {
-            //     let alpha_reg = _mm256_loadu_si256(pxl.as_ptr() as *const __m256i);
-            //     let alpha_mask = _mm256_set1_epi8(-1);
-
-            //     // Whatever happens, this thing generates 4 bytes that I need to check if they are 0b11111111 (-1)
-            //     let alpha_cmp = _mm256_cmpeq_epi8(alpha_reg, alpha_mask);
-
-            //     // Yup, this is the one. Not sure why I would only want to compare the leftmost bit, but seems faster.
-            //     _mm256_movemask_epi8(alpha_cmp)
-            // };
-
-            // cmp.eq(&-1)
-
-            pixel == &alpha_mask
-        })
+        pixel_alpha.iter().any(|px| px != &255)
     }
 
     #[inline(never)]

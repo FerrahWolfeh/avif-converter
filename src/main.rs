@@ -1,4 +1,3 @@
-#![feature(portable_simd)]
 use cli::{commands::Commands, Args};
 use color_eyre::eyre::Result;
 

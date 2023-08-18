@@ -29,7 +29,7 @@ sha2 = { version = "0.10.6", features = ["asm"] }
 spinoff = "0.8.0"
 once_cell = "1.17.1"
 threadpool = "1.8.1"
-image = { version = "0.24.6", default-features = false, features = [
+image = { version = "0.24.7", default-features = false, features = [
     "rgb",
     "png",
     "jpeg",
@@ -43,13 +43,6 @@ avif-serialize = "0.8.1"
 notify-rust = { version = "4.8.0", features = ["images"] }
 thread-priority = "0.13.1"
 notify = "6.0.1"
-
-
-[package.metadata.archlinux_pkgbuild]
-arch = ["x86_64", "aarch64"]
-makedepends = ["cargo", "nasm", "libwebp", "lcms2"]
-pkgrel = 1
-
 [profile.release]
 lto = false
 opt-level = 3
