@@ -43,6 +43,7 @@ avif-serialize = "0.8.1"
 notify-rust = { version = "4.8.0", features = ["images"] }
 thread-priority = "0.13.1"
 notify = "6.0.1"
+blake2 = { version = "0.10.6" }
 
 [profile.release]
 lto = false
