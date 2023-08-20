@@ -1,7 +1,8 @@
 use crate::encoders::avif::encode::Encoder;
 use color_eyre::eyre::{bail, Result};
-use image::{io::Reader, DynamicImage, ImageFormat};
+use image::{imageops::overlay, io::Reader, DynamicImage, ImageBuffer, ImageFormat};
 use indicatif::ProgressBar;
+use log::debug;
 use std::{
     fs::{self, OpenOptions},
     io::{Seek, Write},
@@ -62,19 +63,32 @@ impl ImageFile {
         })
     }
 
-    pub fn load_image_data(&mut self) -> Result<()> {
+    pub fn load_image_data(&mut self, remove_alpha: bool) -> Result<()> {
         let mut image_data = Reader::open(&self.metadata.path)?;
 
         let format = ImageFormat::from_extension(&self.metadata.extension).unwrap();
 
         image_data.set_format(format);
 
-        let raw_image = image_data.decode()?;
+        let mut raw_image = image_data.decode()?;
 
         let (width, height) = (raw_image.width(), raw_image.height());
 
         if width < 32 {
             bail!("Image width too small for encode!")
+        }
+
+        if remove_alpha && raw_image.color().has_alpha() {
+            debug!("Replacing transparent pixels with black");
+            let mut black_square = ImageBuffer::new(width, height);
+
+            for (_, _, pixel) in black_square.enumerate_pixels_mut() {
+                *pixel = image::Rgba([0, 0, 0, 255]);
+            }
+
+            overlay(&mut black_square, &raw_image, 0, 0);
+
+            raw_image = DynamicImage::ImageRgba8(black_square);
         }
 
         self.bitmap = raw_image;
@@ -95,7 +109,7 @@ impl ImageFile {
         progress: Option<ProgressBar>,
     ) -> Result<u64> {
         if self.bitmap.as_bytes().is_empty() {
-            self.load_image_data()?;
+            self.load_image_data(remove_alpha)?;
         }
 
         assert!(!self.bitmap.as_bytes().is_empty());
@@ -107,7 +121,7 @@ impl ImageFile {
             .with_speed(speed)
             .with_bit_depth(depth);
 
-        encoder.encode(self, remove_alpha)?;
+        encoder.encode(self)?;
 
         if let Some(pb) = progress {
             pb.inc(1);

@@ -171,42 +171,17 @@ impl Encoder {
         }
     }
 
-    pub fn encode(&self, image: &mut ImageFile, remove_alpha: bool) -> Result<()> {
+    pub fn encode(&self, image: &mut ImageFile) -> Result<()> {
         if image.bitmap.color().has_alpha() {
             let pix_data = image.bitmap.to_rgba8();
 
             let start = Instant::now();
-            if !Self::check_transparent_pixel(pix_data.as_rgba()) {
+            if Self::check_transparent_pixel(pix_data.as_rgba()) {
                 trace!("SIMD Eval took {:?}", start.elapsed());
                 debug!(
                     "Image {} has transparency, encoding fully.",
                     image.original_name()
                 );
-
-                if remove_alpha {
-                    debug!("Replacing transparent pixels with black");
-                    let mut imgmg = image.bitmap.to_rgba8();
-                    imgmg.pixels_mut().for_each(|px| {
-                        if px.0[3] != 255 {
-                            px.0[3] = 255;
-                            px.0[2] = 0;
-                            px.0[1] = 0;
-                            px.0[0] = 0;
-                        }
-                    });
-
-                    let editable_img = imgmg.as_rgba();
-
-                    let binding = Img::new(
-                        editable_img,
-                        imgmg.width() as usize,
-                        imgmg.height() as usize,
-                    );
-
-                    image.encoded_data = self.encode_rgba(binding)?.avif_file;
-
-                    return Ok(());
-                }
 
                 let enc = self.encode_rgba(Img::new(
                     image.bitmap.to_rgba8().as_rgba(),
