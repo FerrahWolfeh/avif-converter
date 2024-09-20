@@ -3,7 +3,7 @@ name = "avif-converter"
 description = "Simple tool to batch convert multiple images to AVIF"
 authors = ["Ferrah Aiko <ferrahwolfeh@proton.me>"]
 license = "MIT"
-version = "1.10.0"
+version = "1.11.0"
 edition = "2021"
 readme = ""
 
@@ -13,7 +13,7 @@ readme = ""
 bytesize = "1.2.0"
 clap = { version = "4", features = ["derive", "cargo"] }
 color-eyre = { version = "0.6.2", default_features = false }
-env_logger = { version = "0.10.0", default_features = false, features = [
+env_logger = { version = "0.11.3", default_features = false, features = [
     "auto-color",
 ] }
 hex = "0.4.3"
@@ -22,30 +22,30 @@ indicatif = { version = "0.17" }
 log = "0.4"
 md5 = { version = "0.7.0", default_features = false }
 num_cpus = "1.16.0"
-owo-colors = "3.5.0"
+owo-colors = "4.0.0"
 rand = "0.8.5"
 rgb = "0.8.36"
 sha2 = { version = "0.10.6", features = ["asm"] }
 spinoff = "0.8.0"
 once_cell = "1.17.1"
 threadpool = "1.8.1"
-image = { version = "0.24.7", default-features = false, features = [
-    "rgb",
-    "png",
-    "jpeg",
-    "webp",
-    "bmp",
-] }
-rav1e = { version = "0.6.6", default_features = false, features = ["threading", "asm"] }
+image = { version = "0.25.1", default-features = false, features = ["png", "jpeg", "webp", "bmp", "avif-native", "nasm", "rayon", "avif"] }
+rav1e = { version = "0.7.1", default_features = false, features = ["threading", "asm"] }
 thiserror = "1.0"
 loop9 = "0.1.3"
 avif-serialize = "0.8.1"
 notify-rust = { version = "4.8.0", features = ["images"] }
-thread-priority = "0.13.1"
+thread-priority = "1.1.0"
 notify = "6.0.1"
 blake2 = { version = "0.10.6" }
+opencv = { version = "0.93.0", default-features = false, features = ["imgproc", "imgcodecs", "rgb"], optional = true}
 
 [profile.release]
 lto = false
 opt-level = 3
 panic = "abort"
+
+[features]
+default = ["ssim"]
+ssim = ["opencv"]
+opencv = ["dep:opencv"]

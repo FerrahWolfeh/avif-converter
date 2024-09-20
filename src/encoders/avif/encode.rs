@@ -18,9 +18,9 @@ pub struct EncodedImage {
     /// AVIF (HEIF+AV1) encoded image data
     pub avif_file: Vec<u8>,
     /// FYI: number of bytes of AV1 payload used for the color
-    pub color_byte_size: usize,
+    pub _color_byte_size: usize,
     /// FYI: number of bytes of AV1 payload used for the alpha channel
-    pub alpha_byte_size: usize,
+    pub _alpha_byte_size: usize,
 }
 
 /// Encoder config builder
@@ -287,8 +287,8 @@ impl Encoder {
 
         Ok(EncodedImage {
             avif_file,
-            color_byte_size,
-            alpha_byte_size,
+            _color_byte_size: color_byte_size,
+            _alpha_byte_size: alpha_byte_size,
         })
     }
 }

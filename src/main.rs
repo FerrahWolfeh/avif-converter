@@ -1,12 +1,19 @@
-use cli::{commands::Commands, Args};
+use cli::{
+    commands::{Commands, EncodeFuncs},
+    Args,
+};
 use color_eyre::eyre::Result;
 
 mod cli;
 mod console;
+mod decoders;
 mod encoders;
 mod image_file;
 mod name_fun;
 mod utils;
+
+#[cfg(feature = "ssim")]
+mod ssim;
 
 fn main() -> Result<()> {
     color_eyre::install()?;

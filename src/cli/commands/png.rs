@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::exit, sync::atomic::Ordering, time::Instant};
+use std::{path::PathBuf, sync::atomic::Ordering, time::Instant};
 
 use bytesize::ByteSize;
 use clap::Args;
@@ -11,7 +11,7 @@ use crate::{
     cli::{Args as Globals, FINAL_STATS, ITEMS_PROCESSED, SUCCESS_COUNT},
     console::ConsoleMsg,
     image_file::ImageFile,
-    utils::{calculate_tread_count, parse_files, sys_threads, PROGRESS_BAR},
+    utils::{calculate_tread_count, search_dir, sys_threads, PROGRESS_BAR},
 };
 use color_eyre::Result;
 
@@ -19,10 +19,10 @@ use super::EncodeFuncs;
 
 #[derive(Args, Debug, Clone)]
 #[clap(author, about, long_about = None)]
-pub struct Avif {
+pub struct Png {
     /// File or directory containing images to convert
-    #[clap(value_name = "PATH", required = true)]
-    pub path: Vec<PathBuf>,
+    #[clap(value_name = "PATH")]
+    pub path: PathBuf,
 
     /// Enable benchmark mode
     #[clap(
@@ -41,40 +41,31 @@ pub struct Avif {
     /// Send a notification to the desktop when all jobs are finished
     #[clap(short = 'N', long, default_value_t = false)]
     pub notify: bool,
-
-    /// Measure SSIM of encoded vs original image/s.
-    #[cfg(feature = "ssim")]
-    #[clap(long = "ssim", default_value_t = false)]
-    pub ssim: bool,
-
-    /// Save SSIM difference as an image along with the encoded file.
-    #[cfg(feature = "ssim")]
-    #[clap(long = "ssim_save", default_value_t = false, requires = "ssim")]
-    pub ssim_save: bool,
 }
 
-impl EncodeFuncs for Avif {
+impl EncodeFuncs for Png {
     fn run_conv(self, globals: &Globals) -> Result<()> {
         let console = ConsoleMsg::new(globals.quiet, self.notify);
         let error_con = ConsoleMsg::new(globals.quiet, self.notify);
 
-        let l_size = self.path.len();
-
-        let u = if l_size > 1 {
-            self.batch_conv(console, globals)
-        } else {
-            self.single_file_conv(console, globals)
+        let u = {
+            if self.path.is_dir() {
+                self.dir_conv(console, globals)
+            } else if self.path.is_file() {
+                self.single_file_conv(console, globals)
+            } else {
+                bail!("Unsupported operation")
+            }
         };
 
         if let Err(error) = u {
             error_con.notify_error(&error.to_string())?;
-            exit(1);
         }
 
         Ok(())
     }
 
-    fn batch_conv(self, console: ConsoleMsg, globals: &Globals) -> Result<()> {
+    fn dir_conv(self, console: ConsoleMsg, globals: &Globals) -> Result<()> {
         if self.output_file.is_some() {
             bail!("Cannot assign an output file to a directory")
         }
@@ -82,7 +73,7 @@ impl EncodeFuncs for Avif {
         let mut console = console;
         console.set_spinner("Searching for files...");
 
-        let mut paths = parse_files(&self.path);
+        let mut paths = search_dir(&self.path);
         let psize = paths.len();
 
         paths.sort_by(|a, b| a.metadata.name.cmp(&b.metadata.name));
@@ -214,7 +205,7 @@ impl EncodeFuncs for Avif {
 
     fn single_file_conv(self, console: ConsoleMsg, globals: &Globals) -> Result<()> {
         let mut console = console;
-        let mut image = ImageFile::new_from_path(&self.path[0])?;
+        let mut image = ImageFile::new_from_path(&self.path)?;
         let image_size = image.metadata.size;
 
         console.print_message(format!(

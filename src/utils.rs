@@ -1,4 +1,4 @@
-use std::{fmt::Write, fs, path::Path};
+use std::{fmt::Write, fs, path::PathBuf};
 
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
@@ -8,17 +8,31 @@ use crate::image_file::ImageFile;
 pub static PROGRESS_BAR: Lazy<ProgressBar> =
     Lazy::new(|| ProgressBar::new(0).with_style(bar_style()));
 
-pub fn search_dir(dir: &Path) -> Vec<ImageFile> {
-    let paths = fs::read_dir(dir).unwrap();
-
-    Vec::from_iter(paths.filter_map(|entry| {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if let Ok(image_file) = ImageFile::new_from_path(&path) {
-            return Some(image_file);
-        }
-        None
-    }))
+pub fn parse_files(paths: &Vec<PathBuf>) -> Vec<ImageFile> {
+    paths
+        .iter()
+        .flat_map(|item| {
+            if item.is_dir() {
+                // If it's a directory, we attempt to read the directory entries
+                if let Ok(dir) = fs::read_dir(item) {
+                    // Flatten the directory iterator, map each entry to ImageFile, and collect results
+                    dir.flatten()
+                        .filter_map(|entry| {
+                            // Try to create an ImageFile from the entry path
+                            ImageFile::new_from_path(&entry.path()).ok()
+                        })
+                        .collect::<Vec<ImageFile>>() // Collect directory entries into a vector
+                } else {
+                    Vec::new() // If directory read fails, return an empty Vec
+                }
+            } else if item.is_file() {
+                // If it's a file, try to create an ImageFile from it
+                ImageFile::new_from_path(item).ok().into_iter().collect()
+            } else {
+                Vec::new() // If it's neither a file nor a directory, return an empty Vec
+            }
+        })
+        .collect()
 }
 
 pub fn bar_style() -> ProgressStyle {
@@ -68,10 +82,27 @@ pub fn truncate_str(str: &str, size: usize) -> String {
     assert!(str.len() > 3);
 
     if str.len() <= size {
-        return str.to_string()
+        return str.to_string();
     }
 
-    let mut truncated = str[..size].to_string();
+    let file_name: Vec<char> = str.chars().rev().collect();
+    let file_extension = file_name.iter().position(|c| !c.is_alphanumeric());
+    let mut truncated = str[..size - file_extension.unwrap_or(size)].to_string();
+    truncated.push_str(
+        &file_name[file_extension.unwrap_or(0)..file_extension.unwrap_or(size)]
+            .iter()
+            .rev()
+            .cloned()
+            .take(3)
+            .collect::<String>(),
+    );
+    let ext = file_extension
+        .unwrap_or(size)
+        .to_string()
+        .chars()
+        .rev()
+        .collect::<String>();
+    truncated.push_str(&ext);
     truncated.push_str("...");
     truncated
 }

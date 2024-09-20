@@ -39,7 +39,8 @@ impl ImageFile {
                 || ext == "jpeg"
                 || ext == "jfif"
                 || ext == "webp"
-                || ext == "bmp")
+                || ext == "bmp"
+                || ext == "avif")
             {
                 bail!("Unsupported image format");
             }
@@ -138,24 +139,50 @@ impl ImageFile {
 
         let avif_name = fpath.join(format!("{fname}.avif"));
 
+        // If `path` is Some, save to the provided path
         if let Some(new_path) = path {
-            fs::write(new_path, &self.encoded_data)?;
+            let target_avif_name = new_path.join(format!("{fname}.avif"));
+
+            if !keep {
+                // If `keep` is false and we have a target path, we want to replace the original file
+                let mut orig_file = OpenOptions::new().write(true).open(&binding)?;
+                orig_file.set_len(self.encoded_data.len() as u64)?;
+                orig_file.seek(std::io::SeekFrom::Start(0))?;
+                orig_file.write_all(&self.encoded_data)?;
+
+                // Attempt to rename (move) to the new path
+                match fs::rename(&binding, &target_avif_name) {
+                    Ok(_) => return Ok(()), // Success, file moved
+                    Err(_) => {
+                        // Rename failed (likely due to different filesystems), fallback to copy+delete
+                        fs::copy(&binding, &target_avif_name)?;
+                        fs::remove_file(&binding)?; // Remove original after successful copy
+                    }
+                }
+
+                return Ok(());
+            }
+
+            // If `keep` is true, just save the AVIF to the target location
+            fs::write(&target_avif_name, &self.encoded_data)?;
+
             return Ok(());
         }
 
+        // If no `path` is provided, proceed with in-place modifications
         if !keep {
             let mut orig_file = OpenOptions::new().write(true).open(&binding)?;
             orig_file.set_len(self.encoded_data.len() as u64)?;
-
             orig_file.seek(std::io::SeekFrom::Start(0))?;
-
             orig_file.write_all(&self.encoded_data)?;
 
+            // Rename (move) the file to the new AVIF name
             fs::rename(&binding, &avif_name)?;
 
             return Ok(());
         }
 
+        // If `keep` is true, save AVIF to the same directory
         fs::write(&avif_name, &self.encoded_data)?;
 
         Ok(())

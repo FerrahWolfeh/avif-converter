@@ -2,7 +2,7 @@ use thiserror::Error;
 
 #[derive(Debug)]
 #[doc(hidden)]
-pub struct EncodingErrorDetail; // maybe later
+pub struct _EncodingErrorDetail; // maybe later
 
 /// Failures enum
 #[derive(Debug, Error)]
