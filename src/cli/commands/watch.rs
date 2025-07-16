@@ -89,8 +89,8 @@ impl Watch {
         info!(
             "File '{}' encode finished. {} -> {} ({:?})",
             truncate_str(&image.metadata.filename, 32),
-            ByteSize::b(image_size).to_string_as(true),
-            ByteSize::b(fsz).to_string_as(true),
+            ByteSize::b(image_size),
+            ByteSize::b(fsz),
             start.elapsed()
         );
 

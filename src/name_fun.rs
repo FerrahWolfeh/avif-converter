@@ -1,6 +1,6 @@
 use blake2::{digest::typenum::U16, Blake2b, Digest as B2Digest};
 use clap::ValueEnum;
-use rand::{distributions::Alphanumeric, thread_rng, Rng};
+use rand::{distr::Alphanumeric, rng, Rng};
 use sha2::Sha256;
 
 use crate::image_file::ImageFile;
@@ -44,10 +44,8 @@ impl Name {
     }
 
     fn random_string() -> String {
-        let s = thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(32)
-            .map(char::from);
+        let rng = rng();
+        let s = rng.sample_iter(&Alphanumeric).take(32).map(char::from);
 
         String::from_iter(s).to_lowercase()
     }

@@ -8,7 +8,7 @@ use crate::image_file::ImageFile;
 pub static PROGRESS_BAR: Lazy<ProgressBar> =
     Lazy::new(|| ProgressBar::new(0).with_style(bar_style()));
 
-pub fn parse_files(paths: &Vec<PathBuf>) -> Vec<ImageFile> {
+pub fn parse_files(paths: &[PathBuf]) -> Vec<ImageFile> {
     paths
         .iter()
         .flat_map(|item| {
@@ -48,6 +48,28 @@ pub fn bar_style() -> ProgressStyle {
             write!(w, "{:>3.0}%", state.fraction() * 100_f32).unwrap();
         })
         .progress_chars("# ")
+}
+
+#[cfg(feature = "ssim")]
+pub fn ssim_bar_style() -> ProgressStyle {
+    ProgressStyle::default_bar()
+    .template("{spinner:.red.bold} {elapsed_precise:.bold} [{wide_bar:.blue.bold}] {percent:.bold} {pos:.bold} | {win_sec:.bold} (eta. {eta}")
+    .unwrap()
+    .with_key("pos", |state: &ProgressState, w: &mut dyn Write| {
+        write!(w, "{}/{}", state.pos(), state.len().unwrap()).unwrap();
+    })
+    .with_key("percent", |state: &ProgressState, w: &mut dyn Write| {
+        write!(w, "{:>3.0}%", state.fraction() * 100_f32).unwrap();
+    })
+    .with_key(
+        "win_sec",
+        |state: &ProgressState, w: &mut dyn Write| match state.per_sec() {
+            files_sec if files_sec.abs() < f64::EPSILON => write!(w, "0 windows/s").unwrap(),
+              files_sec if files_sec < 1.0 => write!(w, "{:.2} s/window", 1.0 / files_sec).unwrap(),
+              files_sec => write!(w, "{files_sec:.2} windows/s").unwrap(),
+        },
+    )
+    .progress_chars("# ")
 }
 
 #[derive(Debug, Copy, Clone)]

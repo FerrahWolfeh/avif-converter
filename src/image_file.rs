@@ -1,6 +1,6 @@
 use crate::encoders::avif::encode::Encoder;
 use color_eyre::eyre::{bail, Result};
-use image::{imageops::overlay, io::Reader, DynamicImage, ImageBuffer, ImageFormat};
+use image::{imageops::overlay, DynamicImage, ImageBuffer, ImageFormat, ImageReader as Reader};
 use indicatif::ProgressBar;
 use log::debug;
 use std::{
@@ -8,6 +8,9 @@ use std::{
     io::{Seek, Write},
     path::{Path, PathBuf},
 };
+
+#[cfg(feature = "ssim")]
+use std::io::Cursor;
 
 use crate::name_fun::Name;
 
@@ -32,6 +35,7 @@ pub struct ImageFile {
 
 impl ImageFile {
     pub fn new_from_path(path: &Path) -> Result<Self> {
+        debug!("Initializing file {path:?}");
         if let Some(ext) = path.extension() {
             let ext = ext.to_string_lossy().to_lowercase();
             if !(ext == "jpg"
@@ -190,5 +194,15 @@ impl ImageFile {
 
     pub fn original_name(&self) -> String {
         self.metadata.filename.clone()
+    }
+
+    #[cfg(feature = "ssim")]
+    pub fn get_avif_bitmap(&self) -> DynamicImage {
+        let mut image_data = Reader::new(Cursor::new(&self.encoded_data));
+        let format = ImageFormat::Avif;
+
+        image_data.set_format(format);
+
+        image_data.decode().unwrap()
     }
 }

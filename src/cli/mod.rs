@@ -105,7 +105,7 @@ impl Args {
         let thread_response = ThreadPriorityValue::try_from(thread_level as u8).unwrap();
 
         if set_current_thread_priority(ThreadPriority::Crossplatform(thread_response)).is_ok() {
-            debug!("Thread priority set to {:?}", thread_response);
+            debug!("Thread priority set to {thread_response:?}");
         } else {
             error!("Failed to set thread priority. Leaving as default")
         }

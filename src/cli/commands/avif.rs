@@ -13,6 +13,13 @@ use crate::{
     image_file::ImageFile,
     utils::{calculate_tread_count, parse_files, sys_threads, PROGRESS_BAR},
 };
+
+#[cfg(feature = "ssim")]
+use crate::ssim::{calculate_psnr, calculate_ssim_and_diff, overlay_images};
+
+#[cfg(feature = "ssim")]
+use image::ImageFormat;
+
 use color_eyre::Result;
 
 use super::EncodeFuncs;
@@ -42,7 +49,7 @@ pub struct Avif {
     #[clap(short = 'N', long, default_value_t = false)]
     pub notify: bool,
 
-    /// Measure SSIM of encoded vs original image/s.
+    /// Measure SSIM of encoded vs original image.
     #[cfg(feature = "ssim")]
     #[clap(long = "ssim", default_value_t = false)]
     pub ssim: bool,
@@ -51,6 +58,11 @@ pub struct Avif {
     #[cfg(feature = "ssim")]
     #[clap(long = "ssim_save", default_value_t = false, requires = "ssim")]
     pub ssim_save: bool,
+
+    /// SSIM window size. Lower values may speed up SSIM calculation, but will sometimes decrease precision.
+    #[cfg(feature = "ssim")]
+    #[clap(long = "window_size", default_value_t = 8, requires = "ssim")]
+    pub window_size: u8,
 }
 
 impl EncodeFuncs for Avif {
@@ -60,7 +72,10 @@ impl EncodeFuncs for Avif {
 
         let l_size = self.path.len();
 
-        let u = if l_size > 1 {
+        debug!("Entry Count: {l_size}");
+        debug!("Entries: {:?}", &self.path);
+
+        let u = if l_size > 1 || self.path[0].is_dir() {
             self.batch_conv(console, globals)
         } else {
             self.single_file_conv(console, globals)
@@ -160,13 +175,13 @@ impl EncodeFuncs for Avif {
         ];
 
         debug!("Final stats: {}", FINAL_STATS.load(Ordering::Relaxed));
-        debug!("Initial size: {}", initial_size);
+        debug!("Initial size: {initial_size}");
 
         let initial_delta = FINAL_STATS.load(Ordering::Relaxed) as f32 / initial_size as f32;
 
         let delta = (initial_delta * 100.) - 100.;
 
-        debug!("Delta: {}", delta);
+        debug!("Delta: {delta}");
 
         let percentage = if delta < 0. {
             let st1 = format!("{delta:.2}%");
@@ -178,12 +193,12 @@ impl EncodeFuncs for Avif {
 
         let times = {
             let ratio = 1. / initial_delta;
-            debug!("Ratio: {}", ratio);
+            debug!("Ratio: {ratio}");
             if ratio > 0. {
-                let st1 = format!("~{:.1}X smaller", ratio);
+                let st1 = format!("~{ratio:.1}X smaller");
                 format!("{}", st1.green())
             } else {
-                let st1 = format!("~{:.1}X bigger", ratio);
+                let st1 = format!("~{ratio:.1}X bigger");
                 format!("{}", st1.red())
             }
         };
@@ -192,10 +207,9 @@ impl EncodeFuncs for Avif {
             "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({} or {})",
             SUCCESS_COUNT.load(Ordering::SeqCst),
             texts[0],
-            ByteSize::b(initial_size).to_string_as(true).blue().bold(),
+            ByteSize::b(initial_size).blue().bold(),
             texts[1],
             ByteSize::b(FINAL_STATS.load(Ordering::SeqCst))
-                .to_string_as(true)
                 .green()
                 .bold(),
             percentage,
@@ -205,8 +219,8 @@ impl EncodeFuncs for Avif {
         con.notify_text(&format!(
             "Encoded {} files in {elapsed:.2?}\n{} → {}",
             SUCCESS_COUNT.load(Ordering::SeqCst),
-            ByteSize::b(initial_size).to_string_as(true),
-            ByteSize::b(FINAL_STATS.load(Ordering::SeqCst)).to_string_as(true)
+            ByteSize::b(initial_size),
+            ByteSize::b(FINAL_STATS.load(Ordering::SeqCst))
         ))?;
 
         Ok(())
@@ -220,10 +234,7 @@ impl EncodeFuncs for Avif {
         console.print_message(format!(
             "Encoding single file {} ({})",
             image.metadata.name.bold(),
-            ByteSize::b(image.metadata.size)
-                .to_string_as(true)
-                .bold()
-                .blue()
+            ByteSize::b(image.metadata.size).bold().blue()
         ));
 
         console.set_spinner("Processing...");
@@ -239,6 +250,56 @@ impl EncodeFuncs for Avif {
             None,
         )?;
 
+        let ending = start.elapsed();
+
+        let console = console.finish_spinner(&format!(
+            "Encoding finished in {:?} ({})",
+            ending,
+            ByteSize::b(fsz).bold().green()
+        ));
+
+        #[cfg(feature = "ssim")]
+        if self.ssim {
+            let original = &image.bitmap;
+            let encoded = &image.get_avif_bitmap();
+
+            let (ssim_scale, diff_image) =
+                calculate_ssim_and_diff(original, encoded, globals, self.window_size);
+
+            if self.ssim_save {
+                let fdest = if let Some(path) = &self.output_file {
+                    path.clone()
+                } else {
+                    let u1 = image.metadata.path.canonicalize()?;
+                    u1.parent().unwrap().to_path_buf()
+                };
+
+                let overlaid_file_name = format!(
+                    "{}/overlaid_ws_{}.png",
+                    fdest.to_string_lossy(),
+                    self.window_size
+                );
+
+                let overlaid_image = overlay_images(&original.to_rgba8(), &diff_image, 0.6, 0.4);
+                overlaid_image.save_with_format(overlaid_file_name, ImageFormat::Png)?;
+            }
+
+            let psnr = calculate_psnr(original, encoded);
+
+            println!("SSIM: {ssim_scale:.2?}");
+
+            let psnr_threshold = 35.0;
+
+            let psnr_display = if psnr < psnr_threshold {
+                format!("{}", format!("{psnr:.2} dB").red())
+            } else {
+                format!("{}", format!("{psnr:.2} dB").green())
+            };
+
+            // Display the PSNR value with color coding
+            println!("PSNR: {psnr_display}");
+        }
+
         if !self.benchmark {
             image.save_avif(self.output_file, globals.name_type, globals.keep)?;
         }
@@ -250,18 +311,12 @@ impl EncodeFuncs for Avif {
         console.notify_image(
             &format!(
                 "Finished in {:.2?} \n {} → {}",
-                start.elapsed(),
-                ByteSize::b(image_size).to_string_as(true),
-                ByteSize::b(fsz).to_string_as(true)
+                ending,
+                ByteSize::b(image_size),
+                ByteSize::b(fsz)
             ),
             bmp,
         )?;
-
-        console.finish_spinner(&format!(
-            "Encoding finished in {:?} ({})",
-            start.elapsed(),
-            ByteSize::b(fsz).to_string_as(true).bold().green()
-        ));
 
         Ok(())
     }

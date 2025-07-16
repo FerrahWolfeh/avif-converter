@@ -20,11 +20,11 @@
                 }
             },
             "args": [
+                "avif",
                 "-s",
                 "6",
-                "-k",
-                "--ssim",
-                "/mnt/ram/97297934f6fb8517c46c6492e4875458.png"
+                "--benchmark",
+                "/mnt/ram/ANG"
             ],
             "cwd": "${workspaceFolder}"
         },

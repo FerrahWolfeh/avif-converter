@@ -221,7 +221,7 @@ impl Encoder {
     }
 
     #[inline(never)]
-    fn encode_raw_planes<P: rav1e::Pixel + Default>(
+    fn encode_raw_planes<P: Pixel + Default>(
         &self,
         width: usize,
         height: usize,
@@ -294,7 +294,7 @@ impl Encoder {
 }
 
 #[inline(always)]
-fn rgb_to_ycbcr(px: rgb::RGB<u8>, depth: u8) -> (u16, u16, u16) {
+fn rgb_to_ycbcr(px: RGB<u8>, depth: u8) -> (u16, u16, u16) {
     let matrix = [0.2990, 0.5870, 0.1140]; // BT601
 
     let max_value = ((1 << depth) - 1) as f32;
@@ -309,13 +309,13 @@ fn rgb_to_ycbcr(px: rgb::RGB<u8>, depth: u8) -> (u16, u16, u16) {
 }
 
 #[inline(always)]
-fn rgb_to_16_bit_ycbcr(px: rgb::RGB<u8>, depth: u8) -> [u16; 3] {
+fn rgb_to_16_bit_ycbcr(px: RGB<u8>, depth: u8) -> [u16; 3] {
     let (y, u, v) = rgb_to_ycbcr(px, depth);
     [y, u, v]
 }
 
 #[inline(always)]
-fn rgb_to_8_bit_ycbcr(px: rgb::RGB<u8>) -> [u8; 3] {
+fn rgb_to_8_bit_ycbcr(px: RGB<u8>) -> [u8; 3] {
     let (y, u, v) = rgb_to_ycbcr(px, 8);
     [y as u8, u as u8, v as u8]
 }
@@ -543,7 +543,7 @@ fn rav1e_config(p: &Av1EncodeConfig) -> Config {
     cfg.with_threads(p.threads)
 }
 
-fn init_frame_color<P: rav1e::Pixel + Default>(
+fn init_frame_color<P: Pixel + Default>(
     width: usize,
     height: usize,
     planes: impl IntoIterator<Item = [P; 3]> + Send,
@@ -576,7 +576,7 @@ fn init_frame_color<P: rav1e::Pixel + Default>(
     Ok(())
 }
 
-fn init_frame_alpha_pix<P: rav1e::Pixel + Default>(
+fn init_frame_alpha_pix<P: Pixel + Default>(
     width: usize,
     height: usize,
     planes: impl IntoIterator<Item = P> + Send,
@@ -595,7 +595,7 @@ fn init_frame_alpha_pix<P: rav1e::Pixel + Default>(
 }
 
 #[inline(never)]
-fn encode_to_av1<P: rav1e::Pixel>(
+fn encode_to_av1<P: Pixel>(
     p: &Av1EncodeConfig,
     init: impl FnOnce(&mut Frame<P>) -> Result<()>,
 ) -> Result<Vec<u8>> {
