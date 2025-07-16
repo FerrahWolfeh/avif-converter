@@ -6,6 +6,7 @@ use log::{debug, trace};
 use rav1e::prelude::*;
 use rgb::{FromSlice, RGB, RGBA};
 
+use crate::encoders::avif::format::{constants, Aviffy};
 use crate::image_file::ImageFile;
 
 use super::alpha::blurred_dirty_alpha;
@@ -272,8 +273,8 @@ impl Encoder {
 
         let (color, alpha) = (color?, alpha.transpose()?);
 
-        let avif_file = avif_serialize::Aviffy::new()
-            .matrix_coefficients(avif_serialize::constants::MatrixCoefficients::Bt601)
+        let avif_file = Aviffy::new()
+            .matrix_coefficients(constants::MatrixCoefficients::Bt601)
             .premultiplied_alpha(false)
             .to_vec(
                 &color,
