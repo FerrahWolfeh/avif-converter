@@ -370,7 +370,13 @@ impl Aviffy {
             ftyp: FtypBox {
                 major_brand: FourCC(*b"avif"),
                 minor_version: 0,
-                compatible_brands: [FourCC(*b"mif1"), FourCC(*b"miaf")].into(),
+                compatible_brands: [
+                    FourCC(*b"avif"),
+                    FourCC(*b"mif1"),
+                    FourCC(*b"miaf"),
+                    FourCC(*b"MA1B"),
+                ]
+                .into(),
             },
             meta: MetaBox {
                 hdlr: HdlrBox {},

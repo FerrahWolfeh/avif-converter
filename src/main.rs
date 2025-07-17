@@ -8,6 +8,7 @@ mod cli;
 mod console;
 mod decoders;
 mod encoders;
+mod exif;
 mod image_file;
 mod name_fun;
 mod utils;

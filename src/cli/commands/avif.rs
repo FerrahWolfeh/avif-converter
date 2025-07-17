@@ -268,18 +268,19 @@ impl EncodeFuncs for Avif {
 
             if self.ssim_save {
                 let fdest = if let Some(path) = &self.output_file {
-                    path.clone()
+                    if path.is_dir() {
+                        path.clone()
+                    } else {
+                        // unwrap is safe here, as a file path will always have a parent (even if it's `""`)
+                        path.parent().unwrap().to_path_buf()
+                    }
                 } else {
                     let u1 = image.metadata.path.canonicalize()?;
                     u1.parent().unwrap().to_path_buf()
                 };
 
-                let overlaid_file_name = format!(
-                    "{}/overlaid_ws_{}.png",
-                    fdest.to_string_lossy(),
-                    self.window_size
-                );
-
+                let overlaid_file_name =
+                    fdest.join(format!("overlaid_ws_{}.png", self.window_size));
                 let overlaid_image = overlay_images(&original.to_rgba8(), &diff_image, 0.6, 0.4);
                 overlaid_image.save_with_format(overlaid_file_name, ImageFormat::Png)?;
             }

@@ -37,6 +37,8 @@ pub struct Encoder {
     threads: usize,
     /// Bit-depth of image pixels
     bit_depth: u8,
+    /// Exif data
+    exif: Vec<u8>,
 }
 
 /// Builder methods
@@ -50,6 +52,7 @@ impl Encoder {
             speed: 5,
             threads: num_cpus::get(),
             bit_depth: 10,
+            exif: vec![],
         }
     }
 
@@ -101,6 +104,16 @@ impl Encoder {
     pub fn with_bit_depth(mut self, depth: u8) -> Self {
         assert!([8, 10, 12].contains(&depth));
         self.bit_depth = depth;
+        self
+    }
+
+    /// Pixel bit depth. Panics if using an invalid number
+    #[inline(always)]
+    #[track_caller]
+    #[must_use]
+    pub fn with_exif_data(mut self, exif: Vec<u8>) -> Self {
+        assert!(!exif.is_empty());
+        self.exif = exif;
         self
     }
 }
@@ -276,6 +289,7 @@ impl Encoder {
         let avif_file = Aviffy::new()
             .matrix_coefficients(constants::MatrixCoefficients::Bt601)
             .premultiplied_alpha(false)
+            .set_exif(self.exif.clone())
             .to_vec(
                 &color,
                 alpha.as_deref(),

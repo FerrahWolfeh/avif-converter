@@ -1,7 +1,7 @@
 use std::convert::TryFrom;
 use std::io;
 
-pub struct OOM;
+pub struct Oom;
 
 pub trait WriterBackend {
     type Error;
@@ -12,11 +12,11 @@ pub trait WriterBackend {
 /// `io::Write` generates bloated code (with backtrace for every byte written),
 /// so small boxes are written infallibly.
 impl WriterBackend for Vec<u8> {
-    type Error = OOM;
+    type Error = Oom;
 
     #[inline]
     fn reserve(&mut self, size: usize) -> Result<(), Self::Error> {
-        self.try_reserve(size).map_err(|_| OOM)
+        self.try_reserve(size).map_err(|_| Oom)
     }
 
     #[inline(always)]
@@ -27,7 +27,7 @@ impl WriterBackend for Vec<u8> {
             self.extend_from_slice(data);
             Ok(())
         } else {
-            Err(OOM)
+            Err(Oom)
         }
     }
 }

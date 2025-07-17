@@ -104,7 +104,7 @@ const FULL_BOX_SIZE: usize = BASIC_BOX_SIZE + 4;
 pub struct FtypBox {
     pub major_brand: FourCC,
     pub minor_version: u32,
-    pub compatible_brands: ArrayVec<FourCC, 2>,
+    pub compatible_brands: ArrayVec<FourCC, 4>,
 }
 
 /// File Type box (chunk)
