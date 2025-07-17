@@ -1,20 +1,15 @@
 use crate::encoders::avif::encode::Encoder;
 use color_eyre::eyre::{bail, Result};
-use exif::Tag;
 use image::{imageops::overlay, DynamicImage, ImageBuffer, ImageFormat, ImageReader as Reader};
 use indicatif::ProgressBar;
 use log::debug;
-use png::text_metadata::TEXtChunk;
 use std::{
     fs::{self, File},
-    io::{BufReader, Seek},
+    io::{BufReader, Cursor, Read, Seek},
     path::{Path, PathBuf},
 };
 
-#[cfg(feature = "ssim")]
-use std::io::Cursor;
-
-use crate::name_fun::Name;
+use crate::{exif::create_exif_from_png_chunks, name_fun::Name};
 
 #[derive(Debug, Clone)]
 pub struct FileMetadata {
@@ -72,93 +67,25 @@ impl ImageFile {
         })
     }
 
-    pub fn extract_png_metadata(&mut self, text_chunks: &[TEXtChunk]) -> Result<()> {
-        let mut entries: Vec<(Tag, Vec<u8>)> = Vec::new();
-
-        for chunk in text_chunks {
-            match chunk.keyword.as_str() {
-                "prompt" => {
-                    entries.push((Tag::Make, format!("Prompt: {}", chunk.text).into_bytes()));
-                }
-                "workflow" => {
-                    entries.push((
-                        Tag::ImageDescription,
-                        format!("Workflow: {}", chunk.text).into_bytes(),
-                    ));
-                }
-                _ => {
-                    // Store other chunks as UserComment
-                    let comment = format!("{}: {}", chunk.keyword, chunk.text);
-                    entries.push((Tag::UserComment, comment.into_bytes()));
-                }
-            }
-        }
-
-        if entries.is_empty() {
-            return Ok(());
-        }
-
-        let mut exif_data: Vec<u8> = Vec::new();
-
-        // 1. TIFF Header
-        exif_data.extend_from_slice(&[0x4D, 0x4D, 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08]); // Little-Endian, Offset to IFD
-
-        // 2. IFD
-        let num_ifd_entries = entries.len() as u16;
-        exif_data.extend_from_slice(&num_ifd_entries.to_be_bytes());
-
-        // Calculate the base offset for the tag values (after the IFD entries and next IFD offset)
-        let value_offset_base = 8 + 2 + (12 * num_ifd_entries as usize) + 4;
-
-        let mut current_value_offset = value_offset_base;
-
-        for (tag, value) in &entries {
-            // Entry: Tag, Type, Count, ValueOffset
-            exif_data.extend_from_slice(&tag.1.to_be_bytes()); // Tag
-            exif_data.extend_from_slice(&[0x00, 0x02]); // Type: ASCII (0x0002)
-            exif_data.extend_from_slice(&(value.len() as u32 + 1).to_be_bytes()); // Count (String length + null terminator)
-            exif_data.extend_from_slice(&(current_value_offset as u32).to_be_bytes()); // ValueOffset
-            current_value_offset += value.len() + 1;
-        }
-
-        exif_data.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // Next IFD offset (0 for none)
-
-        // 3. Tag Values
-        for (_, value) in &entries {
-            exif_data.extend_from_slice(value);
-            exif_data.push(0x00); // Null terminator
-        }
-
-        // 4. EXIF Header
-        let mut exif_header: Vec<u8> = vec![0x45, 0x78, 0x69, 0x66, 0x00, 0x00]; // "Exif\0\0"
-        let len_bytes = 6u32.to_be_bytes(); // Length of "Exif\0\0" + offset
-
-        exif_header.extend(exif_data);
-        exif_header.splice(0..0, len_bytes.iter().copied());
-
-        self.exif_data = exif_header;
-        Ok(())
-    }
-
-    fn load_image_data_from_reader<R: std::io::Read + Seek>(
+    fn load_image_data_from_reader<R: Read + Seek>(
         &mut self,
-        reader: R,
+        mut reader: R,
         format: ImageFormat,
         remove_alpha: bool,
     ) -> Result<()> {
         if format == ImageFormat::Png {
-            let png_reader = png::Decoder::new(reader).read_info()?;
-            let info = png_reader.info();
-            self.extract_png_metadata(&info.uncompressed_latin1_text)?;
+            let mut buffer = Vec::new();
+            reader.read_to_end(&mut buffer)?;
 
+            let png_reader = png::Decoder::new(Cursor::new(&buffer)).read_info()?;
+            let info = png_reader.info();
+            if let Some(exif) = create_exif_from_png_chunks(&info.uncompressed_latin1_text)? {
+                self.exif_data = exif;
+            }
             drop(png_reader);
 
-            let img_reader = BufReader::new(File::open(self.metadata.path.to_str().unwrap())?);
-
-            let image_data = Reader::with_format(img_reader, ImageFormat::Png);
+            let image_data = Reader::with_format(Cursor::new(buffer), ImageFormat::Png);
             let mut raw_image = image_data.decode()?;
-
-            // The rest of the PNG-specific handling remains the same...
 
             let (width, height) = (raw_image.width(), raw_image.height());
 
@@ -193,25 +120,6 @@ impl ImageFile {
         image_data.set_format(format);
 
         let mut raw_image = image_data.decode()?;
-
-        let (width, height) = (raw_image.width(), raw_image.height());
-
-        if width < 32 {
-            bail!("Image width too small for encode!")
-        }
-
-        if remove_alpha && raw_image.color().has_alpha() {
-            debug!("Replacing transparent pixels with black");
-            let mut black_square = ImageBuffer::new(width, height);
-
-            for (_, _, pixel) in black_square.enumerate_pixels_mut() {
-                *pixel = image::Rgba([0, 0, 0, 255]);
-            }
-
-            overlay(&mut black_square, &raw_image, 0, 0);
-
-            raw_image = DynamicImage::ImageRgba8(black_square);
-        }
 
         let (width, height) = (raw_image.width(), raw_image.height());
 
@@ -288,7 +196,7 @@ impl ImageFile {
         let fpath = binding.parent().unwrap();
         let avif_name = fpath.join(format!("{fname}.avif"));
 
-        let target_path = path.clone().map_or(avif_name.clone(), |p| {
+        let target_path = path.clone().map_or(avif_name, |p| {
             if p.is_dir() {
                 p.join(format!("{fname}.avif"))
             } else {
@@ -296,28 +204,26 @@ impl ImageFile {
             }
         });
 
+        // Always write to a temporary file first for safety.
+        if let Some(parent) = target_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let temp_file_path = fpath.join(format!(".{fname}.tmp"));
+        fs::write(&temp_file_path, &self.encoded_data)?;
+
+        // Atomically move the temporary file to the final target path.
+        fs::rename(&temp_file_path, &target_path)?;
+
         if !keep {
-            // Prepare target directory if needed
-            if let Some(parent) = target_path.parent() {
-                fs::create_dir_all(parent)?;
+            // If not keeping the original, remove it, unless it's the same as the target.
+            let canonical_target = target_path
+                .canonicalize()
+                .unwrap_or_else(|_| target_path.clone());
+            if binding != canonical_target {
+                fs::remove_file(&binding)?;
             }
-
-            // Write the encoded data to a temporary file in the same directory as the original
-            let temp_file_path = fpath.join(format!(".{fname}.tmp"));
-            fs::write(&temp_file_path, &self.encoded_data)?;
-
-            // Atomically replace the original file with the temporary file
-            fs::rename(&temp_file_path, &target_path)?;
-
-            if path.is_none() {
-                // If no output path was specified, also rename the original file to .avif
-                fs::rename(&binding, &avif_name)?;
-            }
-            return Ok(());
         }
 
-        // For `keep` == true, just write the encoded data to the target path
-        fs::write(&target_path, &self.encoded_data)?;
         Ok(())
     }
 

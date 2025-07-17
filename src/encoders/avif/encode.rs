@@ -289,6 +289,8 @@ impl Encoder {
         let avif_file = Aviffy::new()
             .matrix_coefficients(constants::MatrixCoefficients::Bt601)
             .premultiplied_alpha(false)
+            .set_color_primaries(constants::ColorPrimaries::Bt709)
+            .set_transfer_characteristics(constants::TransferCharacteristics::Srgb)
             .set_exif(self.exif.clone())
             .to_vec(
                 &color,

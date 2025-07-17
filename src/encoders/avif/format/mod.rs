@@ -265,12 +265,10 @@ impl Aviffy {
         };
 
         // Redundant info, already in AV1
-        if self.colr != Default::default() {
-            let colr_color_prop = ipco
-                .push(IpcoProp::Colr(self.colr))
-                .ok_or(io::ErrorKind::InvalidInput)?;
-            ipma.prop_ids.push(colr_color_prop);
-        }
+        let colr_color_prop = ipco
+            .push(IpcoProp::Colr(self.colr))
+            .ok_or(io::ErrorKind::InvalidInput)?;
+        ipma.prop_ids.push(colr_color_prop);
         ipma_entries.push(ipma);
 
         if let Some(exif_data) = self.exif.as_deref() {
