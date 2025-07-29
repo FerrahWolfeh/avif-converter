@@ -31,6 +31,10 @@ pub struct Avif {
     #[clap(value_name = "PATH", required = true)]
     pub path: Vec<PathBuf>,
 
+    /// How deep to search for images in directories
+    #[clap(short = 'd', long, value_name = "LEVEL")]
+    pub depth: Option<usize>,
+
     /// Enable benchmark mode
     #[clap(
         long,
@@ -97,8 +101,13 @@ impl EncodeFuncs for Avif {
         let mut console = console;
         console.set_spinner("Searching for files...");
 
-        let mut paths = parse_files(&self.path);
+        let mut paths = parse_files(&self.path, self.depth);
         let psize = paths.len();
+
+        if psize == 0 {
+            console.finish_spinner("No image files found to convert.");
+            return Ok(());
+        }
 
         paths.sort_by(|a, b| a.metadata.name.cmp(&b.metadata.name));
 
@@ -204,7 +213,8 @@ impl EncodeFuncs for Avif {
         };
 
         con.print_message(format!(
-            "Encoded {} files in {elapsed:.2?}.\n{} {} | {} {} ({} or {})",
+            "Encoded {} files in {elapsed:.2?}.
+{} {} | {} {} ({} or {})",
             SUCCESS_COUNT.load(Ordering::SeqCst),
             texts[0],
             ByteSize::b(initial_size).blue().bold(),
@@ -217,7 +227,8 @@ impl EncodeFuncs for Avif {
         ));
 
         con.notify_text(&format!(
-            "Encoded {} files in {elapsed:.2?}\n{} → {}",
+            "Encoded {} files in {elapsed:.2?}
+{} → {}",
             SUCCESS_COUNT.load(Ordering::SeqCst),
             ByteSize::b(initial_size),
             ByteSize::b(FINAL_STATS.load(Ordering::SeqCst))
@@ -311,7 +322,8 @@ impl EncodeFuncs for Avif {
 
         console.notify_image(
             &format!(
-                "Finished in {:.2?} \n {} → {}",
+                "Finished in {:.2?} 
+ {} → {}",
                 ending,
                 ByteSize::b(image_size),
                 ByteSize::b(fsz)

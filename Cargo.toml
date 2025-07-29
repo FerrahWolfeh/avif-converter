@@ -53,6 +53,7 @@ atomic_float = "1.1.0"
 arrayvec = "0.7.6"
 png = "0.17.16"
 kamadak-exif = "0.6.1"
+walkdir = "2.5.0"
 
 [profile.release]
 lto = false

@@ -1,35 +1,34 @@
-use std::{fmt::Write, fs, path::PathBuf};
+use std::{fmt::Write, path::PathBuf};
 
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use once_cell::sync::Lazy;
+use walkdir::WalkDir;
 
 use crate::image_file::ImageFile;
 
 pub static PROGRESS_BAR: Lazy<ProgressBar> =
     Lazy::new(|| ProgressBar::new(0).with_style(bar_style()));
 
-pub fn parse_files(paths: &[PathBuf]) -> Vec<ImageFile> {
+pub fn parse_files(paths: &[PathBuf], depth: Option<usize>) -> Vec<ImageFile> {
     paths
         .iter()
         .flat_map(|item| {
             if item.is_dir() {
-                // If it's a directory, we attempt to read the directory entries
-                if let Ok(dir) = fs::read_dir(item) {
-                    // Flatten the directory iterator, map each entry to ImageFile, and collect results
-                    dir.flatten()
-                        .filter_map(|entry| {
-                            // Try to create an ImageFile from the entry path
-                            ImageFile::new_from_path(&entry.path()).ok()
-                        })
-                        .collect::<Vec<ImageFile>>() // Collect directory entries into a vector
-                } else {
-                    Vec::new() // If directory read fails, return an empty Vec
+                let mut walkdir = WalkDir::new(item);
+                if let Some(d) = depth {
+                    walkdir = walkdir.max_depth(d);
                 }
+
+                walkdir
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().is_file())
+                    .filter_map(|entry| ImageFile::new_from_path(&entry.path()).ok())
+                    .collect::<Vec<ImageFile>>()
             } else if item.is_file() {
-                // If it's a file, try to create an ImageFile from it
                 ImageFile::new_from_path(item).ok().into_iter().collect()
             } else {
-                Vec::new() // If it's neither a file nor a directory, return an empty Vec
+                Vec::new()
             }
         })
         .collect()
